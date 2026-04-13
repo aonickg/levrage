@@ -1,0 +1,985 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LeVrage — Score Simulator</title>
+<script src="levrage_config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #22263a;
+    --border: #2e3354;
+    --gold: #c9a84c;
+    --gold-light: #e8c96a;
+    --gold-dim: rgba(201,168,76,0.15);
+    --text: #e8e8f0;
+    --text-dim: #8890b0;
+    --text-muted: #555d80;
+    --green: #3ecf8e;
+    --green-dim: rgba(62,207,142,0.12);
+    --red: #f04f5a;
+    --red-dim: rgba(240,79,90,0.12);
+    --orange: #f5a623;
+    --orange-dim: rgba(245,166,35,0.12);
+    --blue: #4e9eff;
+    --blue-dim: rgba(78,158,255,0.12);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+
+  /* ── HEADER ── */
+  .header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 28px;
+    height: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .logo { font-size: 20px; font-weight: 800; letter-spacing: -0.5px; color: var(--gold); }
+  .logo span { color: var(--text-dim); font-weight: 400; font-size: 12px; margin-left: 8px; }
+  .header-right { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--text-dim); }
+  .badge {
+    background: var(--gold-dim); color: var(--gold);
+    border: 1px solid rgba(201,168,76,0.3);
+    padding: 3px 9px; border-radius: 20px;
+    font-size: 10px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase;
+  }
+
+  /* ── LAYOUT ── */
+  .layout {
+    display: grid;
+    grid-template-columns: 380px 1fr;
+    min-height: calc(100vh - 60px);
+  }
+  .sidebar {
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    padding: 20px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    /* Sidebar scrolls independently */
+    position: sticky;
+    top: 60px;
+    height: calc(100vh - 60px);
+    overflow-y: auto;
+  }
+  .main {
+    padding: 20px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    /* Main panel scrolls freely */
+    overflow-y: auto;
+  }
+
+  /* ── CARDS ── */
+  .card {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .card-header {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .card-title {
+    font-size: 10px; font-weight: 700;
+    letter-spacing: 1px; text-transform: uppercase;
+    color: var(--text-dim);
+  }
+  .card-body { padding: 16px; }
+
+  /* ── PROJECTION BANNER ── */
+  .projection-banner {
+    background: linear-gradient(135deg, rgba(201,168,76,0.1), rgba(201,168,76,0.03));
+    border: 1px solid rgba(201,168,76,0.3);
+    border-radius: 10px;
+    padding: 18px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+  }
+  .proj-label { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--gold); font-weight: 700; margin-bottom: 4px; }
+  .proj-score { font-size: 36px; font-weight: 800; color: var(--gold-light); font-variant-numeric: tabular-nums; line-height: 1; }
+  .proj-range { font-size: 11px; color: var(--text-dim); margin-top: 4px; }
+  .confidence-wrap { text-align: right; }
+  .confidence-label { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-dim); font-weight: 700; margin-bottom: 6px; }
+  .confidence-circle {
+    width: 66px; height: 66px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 17px; font-weight: 800; margin-left: auto;
+    border: 3px solid; transition: all 0.4s;
+  }
+
+  /* ── SCORE BEFORE/AFTER TABLE ── */
+  .score-table { width: 100%; border-collapse: collapse; }
+  .score-table thead th {
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.8px;
+    color: var(--text-muted); font-weight: 700; padding: 0 0 10px 0; text-align: center;
+  }
+  .score-table thead th:first-child { text-align: left; }
+  .score-table tbody tr { border-top: 1px solid var(--border); }
+  .score-table tbody td { padding: 10px 4px; font-size: 13px; text-align: center; vertical-align: middle; }
+  .score-table tbody td:first-child { text-align: left; }
+  .person-label { font-weight: 700; font-size: 13px; }
+  .bureau-sub { font-size: 10px; color: var(--text-muted); margin-top: 1px; }
+  .score-num-wrap { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+  .score-num { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .score-num.projected { font-size: 20px; }
+  .arrow-col { color: var(--text-muted); font-size: 16px; padding: 0 2px; }
+  .delta-chip {
+    display: inline-block;
+    padding: 2px 7px; border-radius: 4px;
+    font-size: 11px; font-weight: 700;
+    margin-top: 2px;
+  }
+  .delta-pos { background: var(--green-dim); color: var(--green); }
+  .delta-zero { background: transparent; color: var(--text-muted); }
+
+  /* mini bar */
+  .mini-bar-wrap { width: 60px; height: 4px; background: var(--border); border-radius: 2px; margin: 3px auto 0; overflow: hidden; }
+  .mini-bar { height: 100%; border-radius: 2px; transition: width 0.5s ease, background 0.5s ease; }
+
+  /* ── ACCOUNT ROW ── */
+  .section-label {
+    font-size: 10px; font-weight: 700; letter-spacing: 1px;
+    text-transform: uppercase; color: var(--text-muted);
+    margin-bottom: 6px;
+  }
+  .acct-list { display: flex; flex-direction: column; gap: 7px; }
+  .acct-row {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 11px 13px;
+    transition: border-color 0.2s, background 0.2s;
+  }
+  .acct-row.selected { border-color: var(--green); background: var(--green-dim); }
+  .acct-row.selected-remove { border-color: var(--gold); background: var(--gold-dim); }
+
+  .acct-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .acct-name { font-size: 12px; font-weight: 600; color: var(--text); flex: 1; }
+  .tag-who {
+    font-size: 9px; color: var(--text-muted); background: var(--surface);
+    border: 1px solid var(--border); border-radius: 3px; padding: 1px 4px; margin-left: 3px;
+  }
+  .acct-type {
+    font-size: 9px; font-weight: 700; letter-spacing: 0.5px;
+    padding: 2px 6px; border-radius: 3px; text-transform: uppercase; flex-shrink: 0;
+  }
+  .type-revolving { background: var(--blue-dim); color: var(--blue); }
+  .type-collection { background: var(--red-dim); color: var(--red); }
+  .type-chargeoff { background: var(--orange-dim); color: var(--orange); }
+
+  .acct-bottom { display: flex; align-items: center; gap: 8px; margin-top: 7px; }
+  .util-bar-wrap { flex: 1; height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }
+  .util-bar { height: 100%; border-radius: 2px; transition: width 0.3s; }
+  .util-pct { font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; min-width: 34px; text-align: right; }
+  .acct-balance { font-size: 10px; color: var(--text-dim); }
+
+  .acct-action {
+    font-size: 9px; font-weight: 700; padding: 3px 8px;
+    border-radius: 4px; border: 1px solid; cursor: pointer;
+    transition: opacity 0.15s; white-space: nowrap;
+    background: transparent;
+  }
+  .acct-action:hover { opacity: 0.75; }
+
+  .slider-wrap { display: none; margin-top: 9px; padding-top: 9px; border-top: 1px solid var(--border); }
+  .slider-wrap.show { display: block; }
+  .slider-row { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
+  .slider-label { font-size: 10px; color: var(--text-dim); flex: 1; }
+  .slider-val { font-size: 11px; font-weight: 700; color: var(--gold); min-width: 38px; text-align: right; }
+  input[type=range] {
+    -webkit-appearance: none; width: 100%; height: 3px;
+    border-radius: 2px; background: var(--border); outline: none;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 13px; height: 13px;
+    border-radius: 50%; background: var(--gold); cursor: pointer;
+  }
+  .paydown-note { font-size: 10px; color: var(--text-muted); margin-top: 3px; }
+  .paydown-note strong { color: var(--gold); }
+
+  .btn-row { display: flex; gap: 5px; justify-content: flex-end; margin-top: 6px; }
+
+  /* ── IMPACT TABLE ── */
+  .impact-table { width: 100%; border-collapse: collapse; }
+  .impact-table th {
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.8px;
+    color: var(--text-muted); font-weight: 700; text-align: left; padding: 0 0 9px 0;
+  }
+  .impact-table th:last-child { text-align: right; }
+  .impact-table td { font-size: 12px; padding: 7px 0; border-top: 1px solid var(--border); vertical-align: middle; }
+  .impact-table td:last-child { text-align: right; }
+  .impact-name { font-weight: 600; }
+  .impact-desc { font-size: 10px; color: var(--text-dim); margin-top: 1px; }
+  .impact-pts { font-size: 15px; font-weight: 800; font-variant-numeric: tabular-nums; }
+
+  /* ── CASH SUMMARY ── */
+  .summary-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 7px 0; border-bottom: 1px solid var(--border); font-size: 12px;
+  }
+  .summary-row:last-child { border-bottom: none; }
+  .summary-label { color: var(--text-dim); }
+  .summary-val { font-weight: 700; font-variant-numeric: tabular-nums; }
+
+  /* ── DISCLAIMER ── */
+  .disclaimer {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-left: 3px solid var(--gold); border-radius: 8px;
+    padding: 11px 14px; font-size: 10px; color: var(--text-dim); line-height: 1.6;
+  }
+
+  .reset-btn {
+    width: 100%; background: transparent; border: 1px solid var(--border);
+    color: var(--text-dim); padding: 9px; border-radius: 8px;
+    font-size: 11px; cursor: pointer; font-weight: 600; transition: all 0.15s;
+  }
+  .reset-btn:hover { border-color: var(--text-dim); color: var(--text); }
+  ::-webkit-scrollbar { width: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<!-- CLIENT BANNER -->
+<div id="clientBanner" style="display:none;align-items:center;justify-content:space-between;background:linear-gradient(90deg,#1a1500,#111);border-bottom:1px solid #a8843e;padding:7px 20px;font-size:12px;">
+  <div style="display:flex;align-items:center;gap:8px;">
+    <div style="width:7px;height:7px;border-radius:50%;background:#2ecc71;flex-shrink:0;"></div>
+    <span id="cbName" style="font-weight:700;color:#f0f0f0;"></span>
+    <span id="cbMeta" style="color:#888;"></span>
+  </div>
+  <span style="font-size:10px;color:#555;letter-spacing:0.1em;text-transform:uppercase;">Simulator</span>
+</div>
+
+<div class="header">
+  <div class="logo">LeVrage <span>Score Simulator — Advisor Mode</span></div>
+  <div class="header-right">
+    <span id="simClientName">Nick &amp; Fancie Gegovic</span>
+    <span class="badge" id="simPullDate">Pulled 2026-03-30</span>
+    <span class="badge" id="simModeLabel" style="background:rgba(39,174,96,0.15);color:#27ae60;border-color:rgba(39,174,96,0.3);display:none;">● Client Data</span>
+    <span class="badge" id="simDemoLabel" style="background:rgba(168,132,62,0.12);color:var(--gold);border-color:rgba(168,132,62,0.3);">Demo</span>
+  </div>
+</div>
+
+<div class="layout">
+
+  <!-- ══ SIDEBAR ══ -->
+  <div class="sidebar">
+    <div>
+      <div class="section-label">Revolving — Open &amp; Active</div>
+      <div class="acct-list" id="revolving-list"></div>
+    </div>
+    <div>
+      <div class="section-label" id="lbl-neg-b0">Charge-Offs &amp; Collections — Primary</div>
+      <div class="acct-list" id="collections-nick"></div>
+    </div>
+    <div id="neg-b1-section">
+      <div class="section-label" id="lbl-neg-b1">Collections — Co-Borrower</div>
+      <div class="acct-list" id="collections-fancie"></div>
+    </div>
+    <button class="reset-btn" onclick="resetAll()">↺ Reset All Scenarios</button>
+  </div>
+
+  <!-- ══ MAIN ══ -->
+  <div class="main">
+
+    <!-- Projection Banner -->
+    <div class="projection-banner">
+      <div>
+        <div class="proj-label">Projected Improvement</div>
+        <div class="proj-score" id="proj-lift">+0 pts</div>
+        <div class="proj-range" id="proj-range">No scenarios selected yet</div>
+      </div>
+      <div class="confidence-wrap">
+        <div class="confidence-label">Confidence</div>
+        <div class="confidence-circle" id="conf-circle">—</div>
+      </div>
+    </div>
+
+    <!-- BEFORE / AFTER SCORES -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">Score: Current → Projected</div>
+        <div style="font-size:10px;color:var(--text-muted)">Updates live as you toggle scenarios</div>
+      </div>
+      <div class="card-body" style="padding:12px 16px;">
+        <table class="score-table">
+          <thead>
+            <tr>
+              <th style="width:130px"></th>
+              <th>Bureau</th>
+              <th>Current</th>
+              <th class="arrow-col"></th>
+              <th>Projected</th>
+              <th>Change</th>
+            </tr>
+          </thead>
+          <tbody id="score-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Client Goal Selector -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">Client Goal — Set the Target</div>
+        <div style="font-size:10px;color:var(--text-muted)">Thresholds update automatically</div>
+      </div>
+      <div class="card-body" style="padding:14px 16px;">
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px;" id="goal-grid"></div>
+        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:14px;" id="subgoal-grid"></div>
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--surface);border:1px solid var(--border);border-radius:8px;margin-bottom:14px;">
+          <div style="font-size:11px;color:var(--text-dim);flex:1;">Timeline to goal:</div>
+          <select id="timeline-select" onchange="render()" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:5px 10px;border-radius:6px;font-size:12px;cursor:pointer;">
+            <option value="3">3 months</option>
+            <option value="6" selected>6 months</option>
+            <option value="12">12 months</option>
+            <option value="24">24 months</option>
+          </select>
+        </div>
+        <!-- Dynamic target boxes -->
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;" id="target-boxes"></div>
+        <div style="margin-top:12px;font-size:10px;color:var(--text-muted);line-height:1.6;" id="model-note"></div>
+      </div>
+    </div>
+
+    <!-- Impact Breakdown -->
+    <div class="card">
+      <div class="card-header"><div class="card-title">Scenario Impact Breakdown</div></div>
+      <div class="card-body">
+        <table class="impact-table">
+          <thead>
+            <tr><th>Scenario</th><th style="padding-left:8px">Who</th><th>Est. Points</th></tr>
+          </thead>
+          <tbody id="impact-tbody">
+            <tr><td colspan="3" style="color:var(--text-muted);font-size:11px;padding:14px 0;">Select a scenario on the left to see impact here.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Cash Required -->
+    <div class="card">
+      <div class="card-header"><div class="card-title">Cash Required for Selected Paydowns</div></div>
+      <div class="card-body" id="cash-summary">
+        <div style="font-size:11px;color:var(--text-muted)">No paydown scenarios selected yet.</div>
+      </div>
+    </div>
+
+    <div class="disclaimer">
+      <strong style="color:var(--gold)">Methodology:</strong> Projections are estimates based on FICO weighting research — utilization accounts for ~30% of score, payment history ~35%. Collection/charge-off removal impact accounts for account recency, balance size, and how many derogatory items remain after removal. Actual changes vary by bureau model and file composition. Use for directional planning. Verify in 30 days.
+    </div>
+
+  </div><!-- /main -->
+</div><!-- /layout -->
+
+<script>
+// ── GOAL DEFINITIONS ─────────────────────────────────────────────────
+const GOALS = [
+  { id:'conv',  label:'🏠 Conventional', sub:'Buy or Refi',    group:'mortgage' },
+  { id:'fha',   label:'🏠 FHA',          sub:'Buy or Refi',    group:'mortgage' },
+  { id:'va',    label:'🏠 VA / USDA',    sub:'Buy or Refi',    group:'mortgage' },
+  { id:'auto',  label:'🚗 Auto Loan',    sub:'New or Used',    group:'other'    },
+  { id:'card',  label:'💳 Credit Card',  sub:'Approval + Rate',group:'other'    },
+  { id:'score', label:'📈 Score Only',   sub:'No loan target', group:'other'    },
+];
+
+const SUBGOALS = {
+  conv: [
+    { id:'conv_min',  label:'Qualify (Min)',  desc:'Get in the door' },
+    { id:'conv_good', label:'Good Rate',       desc:'Better pricing tier' },
+    { id:'conv_best', label:'Best Rate',       desc:'Lowest available rate' },
+    { id:'conv_refi', label:'Refi w/ Co-Borrow',desc:'Lower middle co-borrower score used' },
+  ],
+  fha: [
+    { id:'fha_35',  label:'3.5% Down',  desc:'580 middle score required' },
+    { id:'fha_10',  label:'10% Down',   desc:'500 min, most lenders req 580' },
+    { id:'fha_ol',  label:'Lender Overlay', desc:'Most lenders require 620+' },
+  ],
+  va: [
+    { id:'va_std', label:'VA Standard', desc:'No official min, most lenders 580-620' },
+    { id:'usda',   label:'USDA',        desc:'640 minimum, rural properties' },
+  ],
+  auto: [
+    { id:'auto_sub',   label:'Subprime',    desc:'< 580, high rate, limited options' },
+    { id:'auto_near',  label:'Near-Prime',  desc:'580–619' },
+    { id:'auto_prime', label:'Prime',       desc:'660–699, good rates' },
+    { id:'auto_super', label:'Super-Prime', desc:'720+, best rates' },
+  ],
+  card: [
+    { id:'card_basic',   label:'Basic Approval', desc:'Secured / starter cards' },
+    { id:'card_good',    label:'Good Cards',     desc:'Most mid-tier rewards cards' },
+    { id:'card_premium', label:'Premium',        desc:'Travel / premium rewards' },
+  ],
+  score: [
+    { id:'score_600', label:'600 Target', desc:'First milestone' },
+    { id:'score_640', label:'640 Target', desc:'Mortgage-ready' },
+    { id:'score_700', label:'700 Target', desc:'Strong credit' },
+    { id:'score_740', label:'740 Target', desc:'Best tier across all products' },
+  ],
+};
+
+// Thresholds: [minimum, target, best]  — all in MORTGAGE model scores
+// Consumer FICO 8 typically runs 20-40pts higher on adverse files
+const THRESHOLDS = {
+  conv:          { tiers:[ {label:'Minimum',score:620,note:'Lowest qualifying middle score'}, {label:'Good Rate',score:660,note:'Better pricing tier'}, {label:'Best Rate',score:740,note:'Lowest rate tier'} ], model:'Mortgage (middle score of 3 bureaus)', coNote:'With co-borrower: lender uses lower of the two middle scores.' },
+  conv_refi:     { tiers:[ {label:'Minimum',score:620,note:'Primary borrower middle score'}, {label:'Co-Borrow Min',score:620,note:'Lower middle score is used'}, {label:'Target',score:660,note:'Good rate tier for both'} ], model:'Mortgage — co-borrower rule applies', coNote:'The lower of the two borrowers\' middle scores drives rate pricing.' },
+  fha:           { tiers:[ {label:'FHA Min (3.5%↓)',score:580,note:'580 required for 3.5% down'}, {label:'Lender Overlay',score:620,note:'Most lenders require 620'}, {label:'Good Rate',score:640,note:'Avoid risk-based pricing'} ], model:'FHA — FICO mortgage model', coNote:'FHA uses lowest middle score when co-borrower is present.' },
+  va:            { tiers:[ {label:'VA Min',score:580,note:'No official VA floor; most lenders 580'}, {label:'Common Overlay',score:620,note:'Majority of VA lenders'}, {label:'Better Rate',score:640,note:'Lower funding fee tiers'} ], model:'VA — FICO mortgage model', coNote:'' },
+  usda:          { tiers:[ {label:'USDA Minimum',score:640,note:'USDA GUS automated approval'}, {label:'Manual UW',score:620,note:'Manual underwrite path'}, {label:'Full Approval',score:660,note:'Cleanest path to approval'} ], model:'USDA — FICO mortgage model', coNote:'' },
+  auto:          { tiers:[ {label:'Non-Prime',score:580,note:'600–640 range, higher rates'}, {label:'Prime',score:660,note:'Competitive rates, most lenders'}, {label:'Super-Prime',score:720,note:'Best available auto rates'} ], model:'Auto — FICO Auto Score 8', coNote:'Auto scores typically run 5-15pts different from FICO 8.' },
+  card:          { tiers:[ {label:'Basic Approval',score:580,note:'Secured or starter cards'}, {label:'Good Cards',score:670,note:'Most mid-tier rewards'}, {label:'Premium',score:720,note:'Travel / premium rewards'} ], model:'Credit Card — FICO Bankcard Score', coNote:'' },
+  score_600:     { tiers:[ {label:'Current',score:508,note:'Nick\'s lowest (TU)'}, {label:'Target',score:600,note:'First clean milestone'}, {label:'Gap',score:600,note:'~92 pts from TU low'} ], model:'FICO 8 estimate (consumer)', coNote:'' },
+  score_640:     { tiers:[ {label:'Minimum Mortgage',score:620,note:'Conventional qualify'}, {label:'Target',score:640,note:'Solid mortgage position'}, {label:'Gap',score:640,note:'~72–132 pts depending on bureau'} ], model:'FICO 8 / Mortgage hybrid', coNote:'' },
+  score_700:     { tiers:[ {label:'Current Best',score:569,note:'Nick Equifax'}, {label:'Target',score:700,note:'Strong across all products'}, {label:'Premium Tier',score:720,note:'Best pricing everywhere'} ], model:'FICO 8 target', coNote:'' },
+  score_740:     { tiers:[ {label:'Current Best',score:569,note:'Nick Equifax'}, {label:'Target',score:740,note:'Best rate tier all products'}, {label:'Elite',score:760,note:'Diminishing returns above this'} ], model:'FICO 8 target', coNote:'' },
+};
+
+// FICO model conversion note by group
+const MODEL_NOTES = {
+  mortgage: 'Scores shown are <strong style="color:var(--text)">mortgage model scores</strong> (Beacon 5.0 / Classic 04 / FairIsaac) — the same models used for this report. Consumer FICO 8 scores typically run <strong style="color:var(--text)">20–40 pts higher</strong> on files with collections. Mortgage lenders use the <strong style="color:var(--text)">middle score</strong> of three bureaus.',
+  other: 'Scores shown are <strong style="color:var(--text)">mortgage model estimates</strong>. Auto and credit card lenders use <strong style="color:var(--text)">FICO Auto Score / FICO Bankcard Score</strong> which can differ ±15–20 pts. Consumer FICO 8 (MYFICO) typically runs 20–40 pts higher on this file due to collections weighting differences.',
+};
+
+let activeGoal = 'conv';
+let activeSubgoal = null;
+
+function getThresholdKey() {
+  if (activeSubgoal === 'conv_refi') return 'conv_refi';
+  if (activeSubgoal === 'fha_35' || activeSubgoal === 'fha_10' || activeSubgoal === 'fha_ol') return 'fha';
+  if (activeSubgoal === 'usda') return 'usda';
+  if (activeSubgoal === 'va_std') return 'va';
+  if (activeSubgoal === 'auto_sub' || activeSubgoal === 'auto_near' || activeSubgoal === 'auto_prime' || activeSubgoal === 'auto_super') return 'auto';
+  if (activeSubgoal === 'card_basic' || activeSubgoal === 'card_good' || activeSubgoal === 'card_premium') return 'card';
+  if (activeSubgoal && activeSubgoal.startsWith('score_')) return activeSubgoal;
+  return activeGoal;
+}
+
+function renderGoalGrid() {
+  document.getElementById('goal-grid').innerHTML = GOALS.map(g => `
+    <div onclick="setGoal('${g.id}')" style="
+      background:${activeGoal===g.id?'var(--gold-dim)':'var(--surface)'};
+      border:1px solid ${activeGoal===g.id?'var(--gold)':'var(--border)'};
+      border-radius:8px; padding:10px 8px; text-align:center; cursor:pointer;
+      transition:all 0.15s;">
+      <div style="font-size:13px;margin-bottom:2px;">${g.label}</div>
+      <div style="font-size:9px;color:${activeGoal===g.id?'var(--gold)':'var(--text-muted)'};">${g.sub}</div>
+    </div>`).join('');
+
+  const subs = SUBGOALS[activeGoal] || [];
+  document.getElementById('subgoal-grid').innerHTML = subs.map(s => `
+    <div onclick="setSubgoal('${s.id}')" style="
+      background:${activeSubgoal===s.id?'var(--surface2)':'var(--surface)'};
+      border:1px solid ${activeSubgoal===s.id?'var(--blue)':'var(--border)'};
+      border-radius:7px; padding:9px 12px; cursor:pointer; transition:all 0.15s;
+      display:flex; align-items:center; gap:10px;">
+      <div style="flex:1;">
+        <div style="font-size:11px;font-weight:700;color:${activeSubgoal===s.id?'var(--blue)':'var(--text)'};">${s.label}</div>
+        <div style="font-size:10px;color:var(--text-muted);margin-top:1px;">${s.desc}</div>
+      </div>
+      <div style="width:10px;height:10px;border-radius:50%;border:2px solid ${activeSubgoal===s.id?'var(--blue)':'var(--border)'};background:${activeSubgoal===s.id?'var(--blue)':'transparent'};flex-shrink:0;"></div>
+    </div>`).join('');
+}
+
+function renderTargetBoxes(nickPts, fanciePts) {
+  const key = getThresholdKey();
+  const config = THRESHOLDS[key] || THRESHOLDS['conv'];
+  const timeline = parseInt(document.getElementById('timeline-select').value);
+  const goal = GOALS.find(g=>g.id===activeGoal);
+  const group = goal ? goal.group : 'mortgage';
+
+  const nickMiddle = [569,508,562].sort((a,b)=>a-b)[1]; // 562
+  const fanciMiddle = [553,504,536].sort((a,b)=>a-b)[1]; // 536
+
+  // Apply projected delta to middle scores
+  const nickProj = nickMiddle + Math.round(nickPts * 0.35);
+  const fanciProj = fanciMiddle + Math.round(fanciePts * 0.35);
+
+  const tiers = config.tiers;
+  const colors = ['var(--text)', 'var(--gold)', 'var(--green)'];
+  const borderColors = ['var(--border)', 'rgba(201,168,76,0.4)', 'rgba(62,207,142,0.3)'];
+
+  document.getElementById('target-boxes').innerHTML = tiers.map((t,i) => {
+    const nickGap = Math.max(0, t.score - nickProj);
+    const fanciGap = Math.max(0, t.score - fanciProj);
+    const nickReached = nickProj >= t.score;
+    const fanciReached = fanciProj >= t.score;
+    const monthsEst = nickGap > 0 ? Math.ceil(nickGap / (nickGap > 60 ? 12 : nickGap > 30 ? 8 : 5)) : 0;
+
+    return `<div style="background:var(--surface);border:1px solid ${borderColors[i]};border-radius:8px;padding:12px;text-align:center;">
+      <div style="font-size:9px;color:${i===0?'var(--text-muted)':colors[i]};text-transform:uppercase;letter-spacing:0.8px;font-weight:700;margin-bottom:6px;">${t.label}</div>
+      <div style="font-size:22px;font-weight:800;color:${colors[i]}">${t.score}</div>
+      <div style="font-size:9px;color:var(--text-dim);margin-top:3px;line-height:1.4;">${t.note}</div>
+      ${nickPts > 0 || Object.keys(state.removed).length > 0 ? `
+        <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);">
+          <div style="font-size:9px;margin-bottom:2px;">
+            <span style="color:${nickReached?'var(--green)':'var(--text-dim)'}">Nick ${nickReached?'✓ reached':'→'+nickProj}</span>
+          </div>
+          <div style="font-size:9px;">
+            <span style="color:${fanciReached?'var(--green)':'var(--text-dim)'}">Fancie ${fanciReached?'✓ reached':'→'+fanciProj}</span>
+          </div>
+          ${monthsEst > 0 && i === 1 ? `<div style="font-size:9px;color:var(--gold);margin-top:4px;">~${Math.min(monthsEst, timeline)} mo.</div>` : ''}
+        </div>` : ''}
+    </div>`;
+  }).join('');
+
+  // Model note
+  document.getElementById('model-note').innerHTML = (config.coNote ? config.coNote + ' ' : '') + MODEL_NOTES[group];
+}
+
+function setGoal(id) {
+  activeGoal = id;
+  activeSubgoal = SUBGOALS[id]?.[0]?.id || null;
+  render();
+}
+function setSubgoal(id) {
+  activeSubgoal = id;
+  render();
+}
+
+// ── DATA (mutable — may be replaced by loadFromReport()) ──────────────
+let REVOLVING = [
+  { id:'r1', name:'GS Bank USA',  acct:'...2637', who:'Nick',   ecoa:'B-1', ownership:'primary',   balance:3357, limit:3450, payment:33  },
+  { id:'r2', name:'GS Bank USA',  acct:'...6899', who:'Fancie', ecoa:'C-1', ownership:'primary',   balance:3710, limit:4000, payment:43  },
+  { id:'r3', name:'SYNCB/Amazon', acct:'...2927', who:'Nick',   ecoa:'B-1', ownership:'primary',   balance:598,  limit:600,  payment:29  },
+  { id:'r4', name:'Citi',         acct:'...7344', who:'Nick',   ecoa:'B-3', ownership:'auth_user', balance:3036, limit:4350, payment:112, auNote:"Nick is authorized user — not Fancie's account" },
+  { id:'r5', name:'Citi',         acct:'...5038', who:'Fancie', ecoa:'C-1', ownership:'primary',   balance:702,  limit:500,  payment:41  },
+];
+
+let COLLECTIONS_NICK = [
+  { id:'cn1', name:'Upstart Network',  acct:'...0729', who:'Nick', balance:44648, type:'chargeoff', months_ago:42 },
+  { id:'cn2', name:'BMW Financial',    acct:'...0468', who:'Nick', balance:16666, type:'chargeoff', months_ago:27 },
+  { id:'cn3', name:'Capital One',      acct:'...9014', who:'Nick', balance:4531,  type:'chargeoff', months_ago:20 },
+  { id:'cn4', name:'Capital One',      acct:'...0528', who:'Nick', balance:2232,  type:'chargeoff', months_ago:20 },
+  { id:'cn5', name:'Capital One',      acct:'...4342', who:'Nick', balance:2068,  type:'chargeoff', months_ago:20 },
+  { id:'cn6', name:'Nordstrom/TD',     acct:'...7263', who:'Nick', balance:1715,  type:'chargeoff', months_ago:22 },
+  { id:'cn7', name:'Credit One',       acct:'...6555', who:'Nick', balance:1171,  type:'chargeoff', months_ago:18 },
+  { id:'cn8', name:'Target/TD',        acct:'...9723', who:'Nick', balance:596,   type:'chargeoff', months_ago:20 },
+];
+
+let COLLECTIONS_FANCIE = [
+  { id:'cf1', name:'LVNV / Best Egg',             acct:'...2968', who:'Fancie', balance:28745, type:'collection', months_ago:16 },
+  { id:'cf2', name:'Portfolio Recovery / CapOne', acct:'...0718', who:'Fancie', balance:6067,  type:'collection', months_ago:6  },
+  { id:'cf3', name:'Midland / Comenity Cap',      acct:'...6260', who:'Fancie', balance:3922,  type:'collection', months_ago:17 },
+  { id:'cf4', name:'Portfolio RC / CreditOne',    acct:'...0983', who:'Fancie', balance:3006,  type:'collection', months_ago:17 },
+  { id:'cf5', name:'Midland / Comenity Bank',     acct:'...7963', who:'Fancie', balance:2585,  type:'collection', months_ago:17 },
+  { id:'cf6', name:'Midland / Citibank',          acct:'...2483', who:'Fancie', balance:1479,  type:'collection', months_ago:12 },
+  { id:'cf7', name:'Portfolio RC / CreditOne',    acct:'...6555', who:'Fancie', balance:1171,  type:'collection', months_ago:17 },
+  { id:'cf8', name:'Midland / Comenity',          acct:'...4201', who:'Fancie', balance:1151,  type:'collection', months_ago:17 },
+  { id:'cf9', name:'Jefferson Cap / Mission Lane',acct:'...4245', who:'Fancie', balance:665,   type:'collection', months_ago:10 },
+];
+
+// Baseline scores (mutable — replaced by loadFromReport())
+let BASELINE = {
+  nick:  { eq: 569, tu: 508, ex: 562 },
+  fancie:{ eq: 553, tu: 504, ex: 536 }
+};
+
+// Track whether we're in demo mode or loaded from a real report
+let SIM_MODE = 'demo'; // 'demo' | 'client'
+let SIM_BORROWER_NAMES = { b0: 'Nick', b1: 'Fancie' };
+
+// ── LOAD FROM PARSED REPORT ────────────────────────────────────────────
+function loadFromReport(report) {
+  if (!report || !report.accounts?.length) return false;
+
+  const borr = report.borrowers || [];
+  const b0name = borr[0]?.name?.split(' ')[0] || 'Primary';
+  const b1name = borr[1]?.name?.split(' ')[0] || (borr.length > 1 ? 'Co-Borrower' : null);
+  SIM_BORROWER_NAMES = { b0: b0name, b1: b1name };
+
+  // Map parsed accounts → REVOLVING format
+  REVOLVING = report.accounts.map((a, i) => ({
+    id:        'p' + (i + 1),
+    name:      a.name,
+    acct:      a.acct || '',
+    who:       a.who || b0name,
+    ecoa:      a.ecoa || 'B-1',
+    ownership: a.ownership || 'primary',
+    balance:   a.balance,
+    limit:     a.limit,
+    payment:   a.payment || 0,
+    ...(a.ownership === 'auth_user' ? { auNote: `${a.who} is authorized user on this account` } : {}),
+  }));
+
+  // Map borrower scores → BASELINE
+  if (borr[0]) {
+    BASELINE.nick = { eq: borr[0].eq || 0, tu: borr[0].tu || 0, ex: borr[0].ex || 0 };
+  }
+  if (borr[1]) {
+    BASELINE.fancie = { eq: borr[1].eq || 0, tu: borr[1].tu || 0, ex: borr[1].ex || 0 };
+  } else {
+    // Single borrower — disable co-borrower row
+    BASELINE.fancie = null;
+  }
+
+  // Map parsed negatives → COLLECTIONS arrays
+  const negs = report.negatives || [];
+  COLLECTIONS_NICK   = negs.filter(n => n.who === b0name || (!b1name && n.who));
+  COLLECTIONS_FANCIE = b1name ? negs.filter(n => n.who === b1name) : [];
+
+  // Note: months_ago defaults to 18 for imported negatives (collection date not in PDF text layer)
+
+  SIM_MODE = 'client';
+  state.revolving = {};
+  state.removed   = {};
+  return true;
+}
+
+const state = { revolving: {}, removed: {} };
+
+// ── SCORING MODELS ────────────────────────────────────────────────────
+function utilImpact(currentUtil, targetUtil, limit) {
+  const cu = Math.min(currentUtil, 1.5);
+  const tu = Math.min(targetUtil, 1.5);
+  if (tu >= cu) return 0;
+  let pts = 0;
+  if (cu > 1.0 && tu <= 1.0) pts += 15;
+  if (cu > 0.50 && tu < 0.50) pts += 18;
+  if (cu > 0.30 && tu < 0.30) pts += 14;
+  if (cu > 0.10 && tu < 0.10) pts += 20;
+  const sizeFactor = Math.min(limit / 3000, 1.4);
+  return Math.round(pts * Math.min(sizeFactor, 1.4));
+}
+
+function collectionImpact(acct, remainingDerog) {
+  const { balance, months_ago, type } = acct;
+  const recency = months_ago <= 12 ? 1.0 : months_ago <= 24 ? 0.75 : months_ago <= 48 ? 0.45 : 0.25;
+  const balFactor = balance > 20000 ? 1.4 : balance > 5000 ? 1.15 : balance > 1000 ? 0.9 : 0.65;
+  const countFactor = remainingDerog > 8 ? 0.6 : remainingDerog > 4 ? 0.85 : 1.0;
+  const typeFactor = type === 'collection' ? 1.0 : 0.85;
+  return Math.round(35 * recency * balFactor * countFactor * typeFactor);
+}
+
+// ── CALCULATE ─────────────────────────────────────────────────────────
+function calculate() {
+  const impacts = [];
+  let nickPts = 0, fanciePts = 0;
+
+  REVOLVING.forEach(a => {
+    const tv = state.revolving[a.id];
+    if (tv === undefined) return;
+    const cu = a.balance / a.limit;
+    let pts = utilImpact(cu, tv, a.limit);
+    if (!pts) return;
+    // Authorized user accounts have reduced scoring weight (~60% of primary impact)
+    const auReduction = a.ownership === 'auth_user' ? 0.6 : 1.0;
+    pts = Math.round(pts * auReduction);
+    const paydown = Math.max(0, a.balance - Math.round(tv * a.limit));
+    const ownerLabel = a.ownership === 'auth_user' ? `${a.who} (AU)` : a.who;
+    const auFlag = a.ownership === 'auth_user' ? ' · AU account, reduced impact' : '';
+    impacts.push({ name:`${a.name} ${a.acct}`, desc:`Util ${(cu*100).toFixed(0)}%→${Math.round(tv*100)}% · pay $${paydown.toLocaleString()}${auFlag}`, who:ownerLabel, pts, cash:paydown, type:'paydown' });
+    // Only credit the score to the account owner — AU does not affect co-borrower
+    const _b1 = SIM_BORROWER_NAMES.b1;
+    if (_b1 && a.who === _b1) fanciePts += pts; else nickPts += pts;
+  });
+
+  const allColls = [...COLLECTIONS_NICK, ...COLLECTIONS_FANCIE];
+  const totalDerog = allColls.length;
+  const removedIds = Object.keys(state.removed).filter(id=>state.removed[id]);
+  removedIds.forEach((id,idx)=>{
+    const a = allColls.find(x=>x.id===id);
+    if(!a) return;
+    const pts = collectionImpact(a, totalDerog - idx);
+    impacts.push({ name:`${a.name} ${a.acct}`, desc:`${a.type==='collection'?'Collection':'Charge-Off'} · $${a.balance.toLocaleString()} · ${a.months_ago} mo. old`, who:a.who, pts, cash:0, type:'removal' });
+    const _b1c = SIM_BORROWER_NAMES.b1;
+    if (_b1c && a.who === _b1c) fanciePts += pts; else nickPts += pts;
+  });
+
+  return { impacts, nickPts, fanciePts };
+}
+
+// ── RENDER SIDEBAR ────────────────────────────────────────────────────
+function getColor(u) {
+  return u>0.9?'var(--red)':u>0.5?'var(--orange)':u>0.3?'var(--gold)':'var(--green)';
+}
+
+function renderRevolving() {
+  document.getElementById('revolving-list').innerHTML = REVOLVING.map(a => {
+    const cu = a.balance / a.limit;
+    const barW = Math.min(cu*100, 100);
+    const color = getColor(cu);
+    const sel = state.revolving[a.id] !== undefined;
+    const tv = sel ? state.revolving[a.id] : cu;
+    const paydown = Math.max(0, a.balance - Math.round(tv*a.limit));
+    return `<div class="acct-row ${sel?'selected':''}" id="row-${a.id}">
+      <div class="acct-top">
+        <div class="acct-name">${a.name} <span class="tag-who">${a.who}</span>${a.ownership==='auth_user'?'<span style="font-size:9px;background:rgba(245,166,35,0.15);color:var(--orange);border:1px solid rgba(245,166,35,0.3);border-radius:3px;padding:1px 5px;margin-left:4px;">AU</span>':''}</div>
+        <div class="acct-type type-revolving">Revolving</div>
+      </div>
+      ${a.ownership==='auth_user'?`<div style="font-size:9px;color:var(--orange);margin-bottom:4px;line-height:1.4;">⚠ ${a.auNote}</div>`:''}
+      <div class="acct-bottom">
+        <div class="acct-balance">$${a.balance.toLocaleString()} / $${a.limit.toLocaleString()}</div>
+        <div class="util-bar-wrap"><div class="util-bar" style="width:${barW}%;background:${color}"></div></div>
+        <div class="util-pct" style="color:${color}">${Math.min(cu*100,140).toFixed(0)}%</div>
+      </div>
+      <div class="slider-wrap ${sel?'show':''}" id="slider-${a.id}">
+        <div class="slider-row">
+          <div class="slider-label">Target utilization:</div>
+          <div class="slider-val" id="sv-${a.id}">${Math.round(tv*100)}%</div>
+        </div>
+        <input type="range" min="0" max="${Math.round(cu*100)}" value="${Math.round(tv*100)}" oninput="updateSlider('${a.id}',this.value)" onclick="event.stopPropagation()">
+        <div class="paydown-note" id="pn-${a.id}">Pay <strong>$${paydown.toLocaleString()}</strong> → balance $${Math.round(tv*a.limit).toLocaleString()}</div>
+      </div>
+      <div class="btn-row">
+        ${!sel
+          ? `<button class="acct-action" style="border-color:var(--blue);color:var(--blue)" onclick="toggleRev('${a.id}',event)">+ Simulate Paydown</button>`
+          : `<button class="acct-action" style="border-color:var(--red);color:var(--red)" onclick="clearRev('${a.id}',event)">✕ Clear</button>`}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderColls(listId, data) {
+  const allColls = [...COLLECTIONS_NICK,...COLLECTIONS_FANCIE];
+  const totalDerog = allColls.length;
+  const removedCount = Object.values(state.removed).filter(Boolean).length;
+  document.getElementById(listId).innerHTML = data.map(a=>{
+    const isRem = !!state.removed[a.id];
+    const remaining = totalDerog - removedCount - (isRem?0:1);
+    const pts = collectionImpact(a, isRem ? remaining+1 : remaining);
+    return `<div class="acct-row ${isRem?'selected-remove':''}" id="row-${a.id}">
+      <div class="acct-top">
+        <div class="acct-name">${a.name} <span class="tag-who">${a.who}</span></div>
+        <div class="acct-type type-${a.type}">${a.type==='collection'?'Collection':'Charge-Off'}</div>
+      </div>
+      <div class="acct-bottom" style="margin-top:5px">
+        <div class="acct-balance" style="color:${a.type==='collection'?'var(--red)':'var(--orange)'}">$${a.balance.toLocaleString()} · ${a.months_ago} mo. ago</div>
+        <div style="margin-left:auto">
+          ${isRem
+            ? `<button class="acct-action" style="border-color:var(--red);color:var(--red)" onclick="toggleRem('${a.id}')">✕ Clear</button>`
+            : `<button class="acct-action" style="border-color:var(--gold);color:var(--gold)" onclick="toggleRem('${a.id}')">Dispute ~+${pts}pts</button>`}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── RENDER MAIN ───────────────────────────────────────────────────────
+function scoreColor(s) {
+  return s>=660?'var(--green)':s>=620?'var(--gold)':s>=580?'var(--orange)':'var(--red)';
+}
+
+function renderScoreTable(nickPts, fanciePts) {
+  const b0 = SIM_BORROWER_NAMES.b0;
+  const b1 = SIM_BORROWER_NAMES.b1;
+  const b0scores = BASELINE.nick   || { eq:0, tu:0, ex:0 };
+  const b1scores = BASELINE.fancie || null;
+
+  const allRows = [
+    { person: b0, key:'nick',   bureaus:[{label:'Equifax',base:b0scores.eq},{label:'TransUnion',base:b0scores.tu},{label:'Experian',base:b0scores.ex}], pts:nickPts,   weights:[0.35,0.30,0.35], role:'Borrower' },
+    ...(b1scores ? [{ person: b1, key:'fancie', bureaus:[{label:'Equifax',base:b1scores.eq},{label:'TransUnion',base:b1scores.tu},{label:'Experian',base:b1scores.ex}], pts:fanciePts, weights:[0.35,0.28,0.37], role:'Co-Borrower' }] : []),
+  ];
+
+  document.getElementById('score-tbody').innerHTML = allRows.flatMap((p,pi) =>
+    p.bureaus.map((b,bi) => {
+      const delta = Math.round(p.pts * p.weights[bi]);
+      const proj = b.base + delta;
+      const barCurr = Math.min((b.base/850)*100,100);
+      const barProj = Math.min((proj/850)*100,100);
+      return `<tr>
+        ${bi===0 ? `<td rowspan="3" style="padding-right:8px;border-top:${pi===0?'none':'2px solid var(--border)'}">
+          <div class="person-label">${p.person}</div>
+          <div class="bureau-sub">${p.role}</div>
+        </td>` : ''}
+        <td style="font-size:11px;color:var(--text-dim);padding-left:4px">${b.label}</td>
+        <td>
+          <div class="score-num-wrap">
+            <div class="score-num" style="color:${scoreColor(b.base)}">${b.base}</div>
+            <div class="mini-bar-wrap"><div class="mini-bar" style="width:${barCurr}%;background:${scoreColor(b.base)}"></div></div>
+          </div>
+        </td>
+        <td class="arrow-col" style="color:var(--text-muted);font-size:14px;">→</td>
+        <td>
+          <div class="score-num-wrap">
+            <div class="score-num projected" style="color:${scoreColor(proj)};transition:color 0.4s">${proj}</div>
+            <div class="mini-bar-wrap"><div class="mini-bar" style="width:${barProj}%;background:${scoreColor(proj)}"></div></div>
+          </div>
+        </td>
+        <td>
+          <span class="delta-chip ${delta>0?'delta-pos':'delta-zero'}">${delta>0?'+':''}${delta}</span>
+        </td>
+      </tr>`;
+    })
+  ).join('');
+}
+
+function render() {
+  renderRevolving();
+  renderColls('collections-nick', COLLECTIONS_NICK);
+  renderColls('collections-fancie', COLLECTIONS_FANCIE);
+  renderGoalGrid();
+
+  const { impacts, nickPts, fanciePts } = calculate();
+  renderTargetBoxes(nickPts, fanciePts);
+  const avgLift = Math.round((nickPts+fanciePts)/2);
+
+  // Banner
+  const liftEl = document.getElementById('proj-lift');
+  liftEl.textContent = avgLift>0?`+${avgLift} pts avg`:'+0 pts';
+  liftEl.style.color = avgLift>40?'var(--green)':avgLift>0?'var(--gold-light)':'var(--text-dim)';
+  const b0 = SIM_BORROWER_NAMES.b0;
+  const b1 = SIM_BORROWER_NAMES.b1;
+  document.getElementById('proj-range').textContent = impacts.length===0
+    ? 'Select scenarios on the left to see projections'
+    : `${b0}: est. +${nickPts} pts${b1 ? `  ·  ${b1}: est. +${fanciePts} pts` : ''}`;
+
+  // Confidence
+  const conf = Math.min(84, Math.max(20, 38 + impacts.length*9 - (impacts.length>4?(impacts.length-4)*4:0)));
+  const ce = document.getElementById('conf-circle');
+  ce.textContent = impacts.length===0?'—':conf+'%';
+  ce.style.borderColor = conf>=65?'var(--green)':conf>=45?'var(--gold)':'var(--orange)';
+  ce.style.color = conf>=65?'var(--green)':conf>=45?'var(--gold)':'var(--orange)';
+
+  // Score table
+  renderScoreTable(nickPts, fanciePts);
+
+  // Impact table
+  const tbody = document.getElementById('impact-tbody');
+  tbody.innerHTML = impacts.length===0
+    ? '<tr><td colspan="3" style="color:var(--text-muted);font-size:11px;padding:14px 0;">Select a scenario from the left panel.</td></tr>'
+    : impacts.map(i=>`<tr>
+        <td><div class="impact-name">${i.name}</div><div class="impact-desc">${i.desc}</div></td>
+        <td style="font-size:11px;color:var(--text-dim);padding-left:8px">${i.who}</td>
+        <td><span class="impact-pts" style="color:var(--green)">+${i.pts}</span></td>
+      </tr>`).join('');
+
+  // Cash summary
+  const cashItems = impacts.filter(i=>i.cash>0);
+  const totalCash = cashItems.reduce((s,i)=>s+i.cash,0);
+  document.getElementById('cash-summary').innerHTML = cashItems.length===0
+    ? '<div style="font-size:11px;color:var(--text-muted)">No paydown scenarios selected yet.</div>'
+    : cashItems.map(i=>`<div class="summary-row"><div class="summary-label">${i.name}</div><div class="summary-val">$${i.cash.toLocaleString()}</div></div>`).join('')
+      + `<div class="summary-row" style="padding-top:10px;border-top:2px solid var(--border);margin-top:4px">
+           <div class="summary-label" style="font-weight:700;color:var(--text)">Total Cash Required</div>
+           <div class="summary-val" style="color:var(--gold);font-size:15px">$${totalCash.toLocaleString()}</div>
+         </div>`;
+}
+
+// ── ACTIONS ───────────────────────────────────────────────────────────
+function toggleRev(id, e) {
+  e && e.stopPropagation();
+  const a = REVOLVING.find(x=>x.id===id);
+  const cu = a.balance/a.limit;
+  state.revolving[id] = cu>0.50?0.49:cu>0.30?0.29:0.09;
+  render();
+}
+function clearRev(id, e) {
+  e && e.stopPropagation();
+  delete state.revolving[id];
+  render();
+}
+function updateSlider(id, val) {
+  state.revolving[id] = parseInt(val)/100;
+  render();
+}
+function toggleRem(id) {
+  state.removed[id] = !state.removed[id];
+  render();
+}
+function resetAll() {
+  Object.keys(state.revolving).forEach(k=>delete state.revolving[k]);
+  Object.keys(state.removed).forEach(k=>delete state.removed[k]);
+  render();
+}
+
+// Set default subgoal and boot
+activeSubgoal = SUBGOALS[activeGoal]?.[0]?.id || null;
+render();
+
+// ── SUPABASE SESSION GUARD + CLIENT BANNER + REPORT LOAD
+(async function() {
+  const { createClient } = supabase;
+  const sb = createClient(LEVRAGE_CONFIG.supabaseUrl, LEVRAGE_CONFIG.supabaseKey);
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { window.location.href = 'LeVrage_login.html'; return; }
+
+  const params = new URLSearchParams(window.location.search);
+  const clientId = params.get('clientId');
+  let d = null;
+  let report = null;
+
+  if (clientId) {
+    const { data } = await sb.from('clients').select('*').eq('id', clientId).single();
+    if (data) {
+      report = data.report_history?.slice(-1)[0] || null;
+      d = {
+        clientName:    data.name,
+        pullDate:      report?.pullDate,
+        borrowers:     report?.borrowers,
+        accounts:      report?.accounts,
+        negatives:     report?.negatives,
+        negativeCount: report?.negativeCount,
+      };
+      localStorage.setItem('levrage_import', JSON.stringify({ clientId: data.id, clientName: data.name, ...d }));
+    }
+  } else {
+    try { d = JSON.parse(localStorage.getItem('levrage_import') || 'null'); } catch(e) {}
+    // Reconstruct report object from localStorage import if available
+    if (d?.accounts?.length) {
+      report = { accounts: d.accounts, borrowers: d.borrowers, negatives: d.negatives, pullDate: d.pullDate };
+    }
+  }
+
+  if (!d || !d.clientName || d.clientName === 'Unknown Client') return;
+
+  // ── Client banner
+  document.getElementById('cbName').textContent = d.clientName;
+  document.getElementById('cbMeta').textContent = `${d.negativeCount || 0} negatives · Pulled ${d.pullDate || '—'}`;
+  document.getElementById('clientBanner').style.display = 'flex';
+
+  // ── Load parsed report into Simulator if accounts are present
+  if (report?.accounts?.length) {
+    const loaded = loadFromReport(report);
+    if (loaded) {
+      // Update sidebar labels with real borrower names
+      const b0 = SIM_BORROWER_NAMES.b0;
+      const b1 = SIM_BORROWER_NAMES.b1;
+      document.getElementById('lbl-neg-b0').textContent = `Negatives — ${b0}`;
+      if (b1) {
+        document.getElementById('lbl-neg-b1').textContent = `Negatives — ${b1}`;
+      } else {
+        document.getElementById('neg-b1-section').style.display = 'none';
+      }
+      // Show client data mode indicator
+      document.getElementById('simModeLabel').style.display = 'inline-block';
+      document.getElementById('simDemoLabel').style.display = 'none';
+      // Re-render with real data
+      render();
+    }
+  }
+
+  // ── Update header with client name and pull date
+  if (d.borrowers?.length > 0) {
+    document.getElementById('simClientName').textContent = d.borrowers.map(b => b.name).join(' & ');
+  } else {
+    document.getElementById('simClientName').textContent = d.clientName;
+  }
+  if (d.pullDate) document.getElementById('simPullDate').textContent = 'Pulled ' + d.pullDate;
+})();
+</script>
+</body>
+</html>

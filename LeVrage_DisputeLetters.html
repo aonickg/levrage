@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LeVrage — Dispute Letter Generator</title>
+<script src="levrage_config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root {
+    --bg: #0f1117; --surface: #1a1d27; --surface2: #22263a; --border: #2e3354;
+    --gold: #c9a84c; --gold-light: #e8c96a; --gold-dim: rgba(201,168,76,0.15);
+    --text: #e8e8f0; --text-dim: #8890b0; --text-muted: #555d80;
+    --green: #3ecf8e; --green-dim: rgba(62,207,142,0.12);
+    --red: #f04f5a; --red-dim: rgba(240,79,90,0.12);
+    --orange: #f5a623; --orange-dim: rgba(245,166,35,0.12);
+    --blue: #4e9eff; --blue-dim: rgba(78,158,255,0.12);
+    --purple: #a78bfa; --purple-dim: rgba(167,139,250,0.12);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+  .header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 28px; height: 60px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
+  .logo { font-size: 20px; font-weight: 800; color: var(--gold); }
+  .logo span { color: var(--text-dim); font-weight: 400; font-size: 12px; margin-left: 8px; }
+  .badge { background: var(--gold-dim); color: var(--gold); border: 1px solid rgba(201,168,76,0.3); padding: 3px 9px; border-radius: 20px; font-size: 10px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; }
+
+  .layout { display: grid; grid-template-columns: 400px 1fr; min-height: calc(100vh - 60px); }
+  .sidebar { background: var(--surface); border-right: 1px solid var(--border); padding: 20px 16px; position: sticky; top: 60px; height: calc(100vh - 60px); overflow-y: auto; display: flex; flex-direction: column; gap: 16px; }
+  .main { padding: 20px 24px; display: flex; flex-direction: column; gap: 16px; }
+
+  .card { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .card-header { padding: 11px 15px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+  .card-title { font-size: 10px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--text-dim); }
+  .card-body { padding: 15px; }
+
+  .section-label { font-size: 10px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--text-muted); margin-bottom: 7px; }
+
+  /* Account cards in sidebar */
+  .acct-item { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 11px 13px; margin-bottom: 7px; cursor: pointer; transition: all 0.15s; }
+  .acct-item:hover { border-color: var(--text-muted); }
+  .acct-item.active { border-color: var(--gold); background: var(--gold-dim); }
+  .acct-item.checked { border-color: var(--green); background: var(--green-dim); }
+  .acct-top { display: flex; align-items: center; gap: 8px; }
+  .acct-check { width: 16px; height: 16px; border: 2px solid var(--border); border-radius: 4px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 10px; transition: all 0.15s; }
+  .acct-item.checked .acct-check { background: var(--green); border-color: var(--green); }
+  .acct-name { font-size: 12px; font-weight: 600; flex: 1; }
+  .acct-who { font-size: 9px; color: var(--text-muted); background: var(--surface); border: 1px solid var(--border); border-radius: 3px; padding: 1px 4px; }
+  .letter-tag { font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 3px; text-transform: uppercase; white-space: nowrap; }
+  .tag-dv { background: var(--blue-dim); color: var(--blue); }
+  .tag-bd { background: var(--orange-dim); color: var(--orange); }
+  .tag-pfd { background: var(--purple-dim); color: var(--purple); }
+  .tag-gw { background: var(--green-dim); color: var(--green); }
+  .acct-sub { font-size: 10px; color: var(--text-dim); margin-top: 4px; display: flex; gap: 10px; }
+  .strategy-note { font-size: 9px; color: var(--text-muted); margin-top: 4px; line-height: 1.4; }
+
+  /* Letter type legend */
+  .legend { display: flex; flex-direction: column; gap: 5px; }
+  .legend-row { display: flex; align-items: flex-start; gap: 8px; font-size: 10px; }
+  .legend-badge { flex-shrink: 0; margin-top: 1px; }
+  .legend-desc { color: var(--text-dim); line-height: 1.4; }
+
+  /* Action bar */
+  .action-bar { display: flex; gap: 8px; align-items: center; }
+  .btn { padding: 9px 16px; border-radius: 7px; font-size: 12px; font-weight: 700; cursor: pointer; border: 1px solid; transition: all 0.15s; }
+  .btn-gold { background: var(--gold-dim); border-color: var(--gold); color: var(--gold); }
+  .btn-gold:hover { background: rgba(201,168,76,0.25); }
+  .btn-outline { background: transparent; border-color: var(--border); color: var(--text-dim); }
+  .btn-outline:hover { border-color: var(--text-dim); color: var(--text); }
+  .count-chip { background: var(--green-dim); color: var(--green); border: 1px solid rgba(62,207,142,0.3); padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; margin-left: auto; }
+
+  /* Letter preview */
+  .letter-preview { display: none; }
+  .letter-preview.visible { display: block; }
+  .letter-paper {
+    background: #fff; color: #1a1a1a;
+    border-radius: 8px; padding: 48px 56px;
+    font-family: 'Times New Roman', serif;
+    font-size: 13px; line-height: 1.7;
+    max-width: 680px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+  }
+  .letter-date { margin-bottom: 20px; }
+  .letter-from { margin-bottom: 20px; line-height: 1.6; }
+  .letter-to { margin-bottom: 24px; line-height: 1.6; }
+  .letter-re { margin-bottom: 20px; font-weight: bold; }
+  .letter-body p { margin-bottom: 14px; }
+  .letter-body ul { margin: 10px 0 10px 24px; }
+  .letter-body li { margin-bottom: 6px; }
+  .letter-sig { margin-top: 32px; }
+  .letter-cert { margin-top: 16px; font-size: 11px; color: #555; font-style: italic; }
+
+  .letter-header-bar { background: var(--surface); border: 1px solid var(--border); border-radius: 10px 10px 0 0; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; }
+  .letter-actions { display: flex; gap: 8px; }
+  .print-btn { background: var(--gold-dim); border: 1px solid var(--gold); color: var(--gold); padding: 7px 14px; border-radius: 6px; font-size: 11px; font-weight: 700; cursor: pointer; }
+  .print-btn:hover { background: rgba(201,168,76,0.25); }
+
+  .empty-state { text-align: center; padding: 48px 24px; color: var(--text-muted); }
+  .empty-state .icon { font-size: 36px; margin-bottom: 12px; }
+  .empty-state .title { font-size: 15px; font-weight: 700; color: var(--text-dim); margin-bottom: 6px; }
+  .empty-state .desc { font-size: 12px; line-height: 1.6; }
+
+  .tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 20px; }
+  .tab { padding: 9px 16px; font-size: 11px; font-weight: 700; cursor: pointer; color: var(--text-muted); border-bottom: 2px solid transparent; margin-bottom: -1px; transition: all 0.15s; }
+  .tab.active { color: var(--gold); border-color: var(--gold); }
+  .tab:hover { color: var(--text-dim); }
+
+  .generated-list { display: flex; flex-direction: column; gap: 14px; }
+
+  ::-webkit-scrollbar { width: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  @media print {
+    body { background: white; }
+    .header, .sidebar, .action-bar, .letter-header-bar, .tabs { display: none !important; }
+    .layout { display: block; }
+    .main { padding: 0; }
+    .letter-paper { box-shadow: none; border-radius: 0; padding: 32px 40px; }
+    .letter-preview { display: block !important; }
+    .card { border: none; }
+  }
+</style>
+</head>
+<body>
+
+<!-- CLIENT BANNER -->
+<div id="clientBanner" style="display:none;align-items:center;justify-content:space-between;background:linear-gradient(90deg,#1a1500,#111);border-bottom:1px solid #a8843e;padding:7px 20px;font-size:12px;">
+  <div style="display:flex;align-items:center;gap:8px;">
+    <div style="width:7px;height:7px;border-radius:50%;background:#2ecc71;flex-shrink:0;"></div>
+    <span id="cbName" style="font-weight:700;color:#f0f0f0;"></span>
+    <span id="cbMeta" style="color:#888;"></span>
+  </div>
+  <span style="font-size:10px;color:#555;letter-spacing:0.1em;text-transform:uppercase;">Dispute Letters</span>
+</div>
+
+<div class="header">
+  <div class="logo">LeVrage <span>Dispute Letter Generator</span></div>
+  <div style="display:flex;align-items:center;gap:10px;">
+    <span style="font-size:12px;color:var(--text-dim)" id="dlClientName">Nick &amp; Fancie Gegovic</span>
+    <span class="badge">17 Negative Tradelines</span>
+  </div>
+</div>
+
+<div class="layout">
+
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <!-- Client info -->
+    <div>
+      <div class="section-label">Client Info (Pre-filled)</div>
+      <div class="card" style="overflow:visible;">
+        <div class="card-body" style="display:flex;flex-direction:column;gap:8px;">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+            <div>
+              <div style="font-size:9px;color:var(--text-muted);margin-bottom:3px;">Borrower Name</div>
+              <input id="name1" value="Nick Gegovic" style="width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);padding:5px 8px;border-radius:5px;font-size:11px;">
+            </div>
+            <div>
+              <div style="font-size:9px;color:var(--text-muted);margin-bottom:3px;">Co-Borrower</div>
+              <input id="name2" value="Francina Gegovic" style="width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);padding:5px 8px;border-radius:5px;font-size:11px;">
+            </div>
+          </div>
+          <div>
+            <div style="font-size:9px;color:var(--text-muted);margin-bottom:3px;">Address</div>
+            <input id="address" value="16436 Via Mera, Macomb, MI 48042" style="width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);padding:5px 8px;border-radius:5px;font-size:11px;">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Legend -->
+    <div>
+      <div class="section-label">Letter Types</div>
+      <div class="legend">
+        <div class="legend-row"><span class="letter-tag tag-dv legend-badge">DV</span><div class="legend-desc"><strong style="color:var(--text)">Debt Validation</strong> — Sent to collector. Forces them to prove the debt is valid before they can continue collecting. FDCPA §809(b).</div></div>
+        <div class="legend-row"><span class="letter-tag tag-bd legend-badge">BD</span><div class="legend-desc"><strong style="color:var(--text)">Bureau Dispute</strong> — Sent to Equifax/Experian/TU. Challenges accuracy or verifiability of an item. FCRA §611.</div></div>
+        <div class="legend-row"><span class="letter-tag tag-pfd legend-badge">P4D</span><div class="legend-desc"><strong style="color:var(--text)">Pay for Delete</strong> — Sent to collector. Offer to pay in exchange for complete removal from all bureaus.</div></div>
+        <div class="legend-row"><span class="letter-tag tag-gw legend-badge">GW</span><div class="legend-desc"><strong style="color:var(--text)">Goodwill</strong> — Sent to original creditor. Requests removal of a late payment as a goodwill gesture.</div></div>
+      </div>
+    </div>
+
+    <!-- Account list -->
+    <div>
+      <div class="section-label" style="display:flex;justify-content:space-between;">
+        <span>Select Accounts</span>
+        <span style="cursor:pointer;color:var(--blue);font-size:9px;" onclick="selectAll()">Select All</span>
+      </div>
+      <div id="acct-list"></div>
+    </div>
+
+    <div class="action-bar" style="flex-wrap:wrap;gap:8px;">
+      <button class="btn btn-gold" onclick="generateLetters()">Generate Selected Letters</button>
+      <button class="btn btn-outline" onclick="clearAll()">Clear</button>
+      <span class="count-chip" id="count-chip">0 selected</span>
+    </div>
+  </div>
+
+  <!-- MAIN -->
+  <div class="main">
+    <div class="tabs">
+      <div class="tab active" id="tab-generated" onclick="switchTab('generated')">Generated Letters</div>
+      <div class="tab" id="tab-strategy" onclick="switchTab('strategy')">Dispute Strategy</div>
+    </div>
+
+    <!-- Generated Letters panel -->
+    <div id="panel-generated">
+      <div class="empty-state" id="empty-state">
+        <div class="icon">✉️</div>
+        <div class="title">No letters generated yet</div>
+        <div class="desc">Select accounts from the left panel and click "Generate Selected Letters" to create ready-to-print dispute and validation letters.</div>
+      </div>
+      <div class="generated-list" id="letter-list"></div>
+    </div>
+
+    <!-- Strategy panel -->
+    <div id="panel-strategy" style="display:none;">
+      <div class="card">
+        <div class="card-header"><div class="card-title">Recommended Dispute Order — Nick &amp; Fancie</div></div>
+        <div class="card-body">
+          <div style="font-size:12px;color:var(--text-dim);line-height:1.7;margin-bottom:16px;">
+            Send letters in this order for maximum effectiveness. Debt Validation letters go out first — they legally pause collection activity. Bureau disputes follow 30 days later so you can cite the collector's non-response as additional evidence.
+          </div>
+          <div id="strategy-table"></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-title">Duplicate Tradeline Opportunity</div></div>
+        <div class="card-body">
+          <div style="font-size:12px;color:var(--text-dim);line-height:1.7;margin-bottom:12px;">
+            The following accounts appear to have both the <strong style="color:var(--orange)">original creditor charge-off</strong> AND a <strong style="color:var(--red)">collection account</strong> reporting the same debt. This is double-reporting of one event. Both can be disputed — the collection for the original creditor's account, and the charge-off for any inaccurate details.
+          </div>
+          <div id="duplicate-list"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── CLIENT ────────────────────────────────────────────────────────────
+const TODAY = new Date().toLocaleDateString('en-US', {year:'numeric',month:'long',day:'numeric'});
+
+// ── BUREAU ADDRESSES ──────────────────────────────────────────────────
+const BUREAUS = {
+  equifax:   { name:'Equifax Information Services LLC', addr:'P.O. Box 105873', city:'Atlanta, GA 30348' },
+  experian:  { name:'Experian', addr:'P.O. Box 2002', city:'Allen, TX 75013' },
+  transunion:{ name:'TransUnion LLC Consumer Dispute Center', addr:'P.O. Box 2000', city:'Chester, PA 19016' },
+};
+
+// ── ACCOUNTS ──────────────────────────────────────────────────────────
+// letterType: 'dv'=debt validation, 'bd'=bureau dispute, 'pfd'=pay-for-delete, 'gw'=goodwill
+// strategy: explanation shown in UI
+// duplicateOf: links collector back to original charge-off id
+
+const ACCOUNTS = [
+  // ── NICK CHARGE-OFFS ──
+  {
+    id:'cn1', who:'Nick', name:'Upstart Network Inc/F', acct:'...0729',
+    type:'chargeoff', balance:44648, months_ago:42,
+    collector:null, collectorAddr:'c/o LVNV Funding LLC, P.O. Box 10584, Greenville, SC 29603',
+    letterType:'bd',
+    bureaus:['equifax','experian','transunion'],
+    strategy:'Large charge-off, 42 months old. Dispute with all three bureaus citing the account as unverifiable. Also confirm whether LVNV is the current collector — if so, send a separate DV letter to LVNV.',
+    originalCreditor:'Upstart Network Inc', amount:42600,
+  },
+  {
+    id:'cn2', who:'Nick', name:'BMW Financial Services', acct:'...0468',
+    type:'chargeoff', balance:16666, months_ago:27,
+    collector:'BMW Financial / Recovery', collectorAddr:'BMW Financial Services, P.O. Box 3608, Dublin, OH 43016',
+    letterType:'bd',
+    bureaus:['equifax','experian','transunion'],
+    strategy:'Charged off and transferred to recovery. Dispute for accuracy — verify the balance, date of first delinquency, and closed date. Any inaccuracy is grounds for removal.',
+    originalCreditor:'BMW Financial Services', amount:16666,
+  },
+  {
+    id:'cn3', who:'Nick', name:'Capital One (Charge-Off)', acct:'...9014',
+    type:'chargeoff', balance:4531, months_ago:20,
+    collector:'Portfolio Recovery Associates', collectorAddr:'Portfolio Recovery Associates LLC, 120 Corporate Blvd, Norfolk, VA 23502',
+    letterType:'bd', duplicateCollector:'cf_co1',
+    bureaus:['equifax','experian','transunion'],
+    strategy:'DUPLICATE TRADELINE — Original charge-off AND Portfolio Recovery are both reporting this same debt. Dispute the charge-off with bureaus for inaccuracies AND send DV letter to Portfolio Recovery.',
+    originalCreditor:'Capital One', amount:3500,
+  },
+  {
+    id:'cn4', who:'Nick', name:'Capital One (Charge-Off)', acct:'...0528',
+    type:'chargeoff', balance:2232, months_ago:20,
+    letterType:'bd',
+    bureaus:['equifax','experian','transunion'],
+    strategy:'Charge-off closed by credit grantor. Dispute for unverifiable information — account was frozen/charged-off, verify reporting accuracy especially the balance and date of last activity.',
+    originalCreditor:'Capital One', amount:1800,
+  },
+  {
+    id:'cn5', who:'Nick', name:'Capital One (Charge-Off)', acct:'...4342',
+    type:'chargeoff', balance:2068, months_ago:20,
+    letterType:'bd',
+    bureaus:['equifax','experian','transunion'],
+    strategy:'Third Capital One charge-off. Multiple charge-offs from same creditor within same period — dispute each separately for accuracy. Verify date of first delinquency on all three.',
+    originalCreditor:'Capital One', amount:1600,
+  },
+  {
+    id:'cn6', who:'Nick', name:'Nordstrom / TD Bank', acct:'...7263',
+    type:'chargeoff', balance:1715, months_ago:22,
+    letterType:'bd',
+    bureaus:['equifax','experian','transunion'],
+    strategy:'Profit and loss writeoff. Dispute as unverifiable — these accounts are often sold to collectors without complete records, making verification difficult for the bureaus.',
+    originalCreditor:'Nordstrom/TD', amount:2000,
+  },
+  {
+    id:'cn7', who:'Nick', name:'Credit One Bank (Charge-Off)', acct:'...6555',
+    type:'chargeoff', balance:1171, months_ago:18,
+    collector:'Portfolio Recovery Associates', collectorAddr:'Portfolio Recovery Associates LLC, 120 Corporate Blvd, Norfolk, VA 23502',
+    letterType:'dv', duplicateCollector:'cf_co2',
+    bureaus:['experian'],
+    strategy:'DUPLICATE — Credit One charge-off + Portfolio RC collecting same debt. Send DV to Portfolio Recovery first. Dispute original charge-off with Experian (only bureau reporting it).',
+    originalCreditor:'Credit One Bank NA', amount:800,
+  },
+  {
+    id:'cn8', who:'Nick', name:'Target / TD Bank (Charge-Off)', acct:'...9723',
+    type:'chargeoff', balance:596, months_ago:20,
+    collector:'TrueAccord', collectorAddr:'TrueAccord Corp, 16011 College Blvd, Lenexa, KS 66219',
+    letterType:'pfd',
+    bureaus:['equifax','experian','transunion'],
+    strategy:'DUPLICATE — Target charge-off + TrueAccord collecting same debt. Small balance — strong pay-for-delete candidate. Offer $250-300 for complete deletion from all bureaus.',
+    originalCreditor:'Target/TD', amount:300,
+  },
+
+  // ── FANCIE COLLECTIONS ──
+  {
+    id:'cf1', who:'Fancie', name:'LVNV Funding (Best Egg)', acct:'...2968',
+    type:'collection', balance:28745, months_ago:16,
+    collector:'LVNV Funding LLC', collectorAddr:'LVNV Funding LLC, P.O. Box 10584, Greenville, SC 29603',
+    letterType:'dv',
+    bureaus:['equifax','experian','transunion'],
+    strategy:'Large, recent collection. Send Debt Validation immediately — LVNV must prove they own this debt and have authority to collect. Many DV requests on LVNV accounts result in no response (removal by default). Original creditor: Best Egg / Blue Ridge Bank.',
+    originalCreditor:'Best Egg / Blue Ridge Bank', amount:28745,
+  },
+  {
+    id:'cf2', who:'Fancie', name:'Portfolio Recovery (Capital One)', acct:'...0718',
+    type:'collection', balance:6067, months_ago:6,
+    collector:'Portfolio Recovery Associates', collectorAddr:'Portfolio Recovery Associates LLC, 120 Corporate Blvd, Norfolk, VA 23502',
+    letterType:'dv',
+    bureaus:['equifax','experian','transunion'],
+    strategy:'Very recent (6 months). Send DV immediately — within 30 days of first contact obligates them to validate. Original creditor: Capital One.',
+    originalCreditor:'Capital One N.A.', amount:6067,
+  },
+  {
+    id:'cf3', who:'Fancie', name:'Midland Credit (Comenity Capital)', acct:'...6260',
+    type:'collection', balance:3922, months_ago:17,
+    collector:'Midland Credit Management', collectorAddr:'Midland Credit Management, 350 Camino De La Reina, San Diego, CA 92108',
+    letterType:'dv',
+    bureaus:['equifax','experian','transunion'],
+    strategy:'Midland accounts frequently fail debt validation. Send DV first — they often cannot produce original signed agreement for purchased Comenity debts.',
+    originalCreditor:'Comenity Capital Bank', amount:3922,
+  },
+  {
+    id:'cf4', who:'Fancie', name:'Portfolio RC (Credit One)', acct:'...0983',
+    type:'collection', balance:3006, months_ago:17,
+    collector:'Portfolio Recovery Associates', collectorAddr:'Portfolio Recovery Associates LLC, 120 Corporate Blvd, Norfolk, VA 23502',
+    letterType:'dv',
+    bureaus:['experian','transunion'],
+    strategy:'Portfolio RC collecting Credit One debt. DV first. Verify bureaus reporting — if only 2 bureaus, dispute the accuracy of the balance and date on each.',
+    originalCreditor:'Credit One Bank N.A.', amount:3006,
+  },
+  {
+    id:'cf5', who:'Fancie', name:'Midland Credit (Comenity Bank)', acct:'...7963',
+    type:'collection', balance:2585, months_ago:17,
+    collector:'Midland Credit Management', collectorAddr:'Midland Credit Management, 350 Camino De La Reina, San Diego, CA 92108',
+    letterType:'dv',
+    bureaus:['equifax','experian','transunion'],
+    strategy:'Second Midland/Comenity account. Same strategy — DV letter. Midland often cannot validate multiple purchased Comenity accounts simultaneously.',
+    originalCreditor:'Comenity Bank', amount:2585,
+  },
+  {
+    id:'cf6', who:'Fancie', name:'Midland Credit (Citibank)', acct:'...2483',
+    type:'collection', balance:1479, months_ago:12,
+    collector:'Midland Credit Management', collectorAddr:'Midland Credit Management, 350 Camino De La Reina, San Diego, CA 92108',
+    letterType:'dv',
+    bureaus:['equifax','experian','transunion'],
+    strategy:'Citibank debt purchased by Midland. DV letter — Citibank debts purchased by third-party collectors frequently cannot be validated with original agreement.',
+    originalCreditor:'Citibank N.A.', amount:1479,
+  },
+  {
+    id:'cf7', who:'Fancie', name:'Portfolio RC (Credit One #2)', acct:'...6555',
+    type:'collection', balance:1171, months_ago:17,
+    collector:'Portfolio Recovery Associates', collectorAddr:'Portfolio Recovery Associates LLC, 120 Corporate Blvd, Norfolk, VA 23502',
+    letterType:'pfd',
+    bureaus:['experian','transunion'],
+    strategy:'Second Credit One / Portfolio RC account. Small enough for pay-for-delete. Offer $400-500 for complete removal. Also dispute for accuracy — verify this is not a duplicate of the Credit One charge-off already on Nick\'s file.',
+    originalCreditor:'Credit One Bank N.A.', amount:1171,
+  },
+  {
+    id:'cf8', who:'Fancie', name:'Midland Credit (Comenity #3)', acct:'...4201',
+    type:'collection', balance:1151, months_ago:17,
+    collector:'Midland Credit Management', collectorAddr:'Midland Credit Management, 350 Camino De La Reina, San Diego, CA 92108',
+    letterType:'pfd',
+    bureaus:['equifax','experian','transunion'],
+    strategy:'Third Midland/Comenity account. Pay-for-delete candidate at this balance — offer $400 for full removal. If denied, DV letter.',
+    originalCreditor:'Comenity Capital Bank', amount:1151,
+  },
+  {
+    id:'cf9', who:'Fancie', name:'Jefferson Capital (Mission Lane)', acct:'...4245',
+    type:'collection', balance:665, months_ago:10,
+    collector:'Jefferson Capital LLC', collectorAddr:'Jefferson Capital LLC, 16 McLeland Rd, Saint Cloud, MN 56303',
+    letterType:'pfd',
+    bureaus:['equifax','experian','transunion'],
+    strategy:'Small balance, 10 months old. Strong pay-for-delete candidate — offer $250-300. Mission Lane card debts are commonly sold and Jefferson Capital frequently accepts PFD offers.',
+    originalCreditor:'Mission Lane Credit Card', amount:665,
+  },
+];
+
+// ── STATE ─────────────────────────────────────────────────────────────
+const selected = new Set();
+let activeTab = 'generated';
+
+// ── LETTER GENERATORS ─────────────────────────────────────────────────
+function clientName(who) {
+  const n1 = document.getElementById('name1').value || 'Nick Gegovic';
+  const n2 = document.getElementById('name2').value || 'Francina Gegovic';
+  return who === 'Fancie' ? n2 : n1;
+}
+function clientAddr() { return document.getElementById('address').value || '16436 Via Mera, Macomb, MI 48042'; }
+
+function generateDV(acct) {
+  const name = clientName(acct.who);
+  const addr = clientAddr();
+  return `
+    <div class="letter-date">${TODAY}</div>
+    <div class="letter-from">${name}<br>${addr}</div>
+    <div class="letter-to">${acct.collector || acct.name}<br>${acct.collectorAddr || ''}</div>
+    <div class="letter-re">RE: Debt Validation Request — Account ${acct.acct} | Original Creditor: ${acct.originalCreditor}</div>
+    <div class="letter-body">
+      <p>To Whom It May Concern:</p>
+      <p>I am writing pursuant to my rights under the Fair Debt Collection Practices Act (FDCPA), 15 U.S.C. § 1692g(b), to formally request validation of the debt you claim I owe. I am disputing this debt and requesting that you provide complete verification before any further collection activity occurs.</p>
+      <p>You are hereby notified that I am requesting the following information in writing within 30 days of receipt of this letter:</p>
+      <ul>
+        <li>Complete documentation proving the amount of the alleged debt (${acct.balance.toLocaleString('en-US',{style:'currency',currency:'USD'})}) is accurate, including a full payment history from the original creditor</li>
+        <li>Proof that your company is licensed to collect debts in the state of Michigan</li>
+        <li>A copy of any signed agreement or contract between myself and the original creditor, ${acct.originalCreditor}</li>
+        <li>Documentation proving your company's legal authority to collect this alleged debt, including the date of assignment and any chain of ownership</li>
+        <li>The name and address of the original creditor, if different from your company</li>
+        <li>Verification that the statute of limitations on this debt has not expired</li>
+      </ul>
+      <p>Until this debt is properly validated, you must cease all collection activity, including any reporting to consumer reporting agencies. If you have already reported this account to Equifax, Experian, or TransUnion, you must notify each bureau to suppress the account during the validation period.</p>
+      <p>This is not a refusal to pay, but a notice that I am disputing the validity of this alleged debt in accordance with my federally protected rights. All future correspondence must be in writing. Do not contact me by telephone.</p>
+      <p>Please be advised that if this debt is not validated within 30 days, I will file a complaint with the Consumer Financial Protection Bureau (CFPB) and the Michigan Department of Insurance and Financial Services.</p>
+      <div class="letter-sig">
+        Sincerely,<br><br><br>
+        ${name}<br>
+        ${addr}
+      </div>
+      <div class="letter-cert">Send via USPS Certified Mail with Return Receipt Requested. Keep your receipt. The green card is your proof they received this letter. If they do not respond within 30 days, the debt is considered unvalidated and you may dispute its reporting with the credit bureaus.</div>
+    </div>`;
+}
+
+function generateBD(acct, bureau) {
+  const b = BUREAUS[bureau];
+  const name = clientName(acct.who);
+  const addr = clientAddr();
+  return `
+    <div class="letter-date">${TODAY}</div>
+    <div class="letter-from">${name}<br>${addr}</div>
+    <div class="letter-to">${b.name}<br>${b.addr}<br>${b.city}</div>
+    <div class="letter-re">RE: Formal Dispute of Inaccurate / Unverifiable Information<br>Account: ${acct.name} | Account #: ${acct.acct}</div>
+    <div class="letter-body">
+      <p>To Whom It May Concern:</p>
+      <p>I am writing pursuant to my rights under the Fair Credit Reporting Act (FCRA), 15 U.S.C. § 1681i, to formally dispute the accuracy of the following item appearing on my consumer credit file:</p>
+      <ul>
+        <li><strong>Creditor Name:</strong> ${acct.name}</li>
+        <li><strong>Account Number:</strong> ${acct.acct}</li>
+        <li><strong>Reported Balance:</strong> ${acct.balance.toLocaleString('en-US',{style:'currency',currency:'USD'})}</li>
+        <li><strong>Account Status:</strong> ${acct.type === 'chargeoff' ? 'Charge-Off' : 'Collection'}</li>
+      </ul>
+      <p>I am disputing this item because the information as reported is <strong>inaccurate and/or unverifiable</strong>. Specifically:</p>
+      <ul>
+        ${acct.duplicateCollector ? '<li>This account appears to be reported twice — once as the original creditor\'s charge-off and again as a third-party collection account for the same underlying debt. This constitutes double-reporting of a single event, which is inaccurate under the FCRA.</li>' : ''}
+        <li>I am requesting verification of the date of first delinquency, the balance owed, and all payment history associated with this account</li>
+        <li>I am requesting verification that the reporting entity is the legal owner or authorized party with standing to report this debt</li>
+        <li>I am requesting confirmation that the seven-year reporting period has not been miscalculated</li>
+      </ul>
+      <p>Pursuant to FCRA § 1681i, you are required to conduct a reasonable investigation of this dispute within 30 days (or 45 days if I provide additional information) and notify me of the results in writing. If the information cannot be verified, you are required to delete it from my credit file.</p>
+      <p>Please provide written confirmation of the results of your investigation. If the item is verified, provide the name, address, and telephone number of the furnisher of the information, along with a description of the procedure used to determine the accuracy of the item.</p>
+      <div class="letter-sig">
+        Sincerely,<br><br><br>
+        ${name}<br>
+        ${addr}
+      </div>
+      <div class="letter-cert">Send via USPS Certified Mail with Return Receipt Requested. Keep all receipts and tracking numbers. The bureau has 30 days to respond from the date they receive this letter.</div>
+    </div>`;
+}
+
+function generatePFD(acct) {
+  const name = clientName(acct.who);
+  const addr = clientAddr();
+  const offerAmt = Math.round(acct.balance * 0.45);
+  return `
+    <div class="letter-date">${TODAY}</div>
+    <div class="letter-from">${name}<br>${addr}</div>
+    <div class="letter-to">${acct.collector || acct.name}<br>${acct.collectorAddr || ''}</div>
+    <div class="letter-re">RE: Settlement Offer — Pay for Delete | Account ${acct.acct} | Original Creditor: ${acct.originalCreditor}</div>
+    <div class="letter-body">
+      <p>To Whom It May Concern:</p>
+      <p>I am writing regarding the above-referenced account, which your company has reported to the consumer reporting agencies. While I am not acknowledging that I owe this debt, I am prepared to resolve this matter in exchange for the complete removal of this account from all consumer reporting agencies — Equifax, Experian, and TransUnion.</p>
+      <p>I am prepared to offer a one-time settlement payment of <strong>${offerAmt.toLocaleString('en-US',{style:'currency',currency:'USD'})}</strong> (in full and final satisfaction of this account) in exchange for the following:</p>
+      <ul>
+        <li>Complete deletion of this account from Equifax, Experian, and TransUnion within 30 days of payment receipt</li>
+        <li>Written confirmation of this agreement on your company letterhead, signed by an authorized representative, before any payment is made</li>
+        <li>A statement that this payment constitutes full and final settlement of the alleged debt</li>
+        <li>No re-selling or re-assignment of this account to another collector</li>
+      </ul>
+      <p>This offer is contingent upon complete deletion — not merely updating the account to "paid" or "settled." A zero-balance collection still negatively impacts credit scores. The only acceptable outcome is full deletion from all three bureaus.</p>
+      <p>This offer is valid for 30 days from the date of this letter. If I do not receive a written response accepting these terms within that timeframe, I will withdraw this offer and pursue other remedies available to me under the FCRA and FDCPA.</p>
+      <p>Please respond in writing only. Do not contact me by telephone.</p>
+      <div class="letter-sig">
+        Sincerely,<br><br><br>
+        ${name}<br>
+        ${addr}
+      </div>
+      <div class="letter-cert">IMPORTANT: Do not send payment until you receive written agreement signed by an authorized representative. A verbal agreement is not sufficient. Once you have written confirmation, pay by money order or cashier's check — never by ACH or debit card, which gives the collector access to your bank account.</div>
+    </div>`;
+}
+
+// ── RENDER ACCOUNT LIST ───────────────────────────────────────────────
+const TYPE_LABELS = { dv:'DV', bd:'BD', pfd:'P4D', gw:'GW' };
+const TYPE_CLASSES = { dv:'tag-dv', bd:'tag-bd', pfd:'tag-pfd', gw:'tag-gw' };
+
+function renderList() {
+  const nick = ACCOUNTS.filter(a=>a.who==='Nick');
+  const fancie = ACCOUNTS.filter(a=>a.who==='Fancie');
+
+  let html = '<div style="font-size:10px;color:var(--text-muted);font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;">— Nick —</div>';
+  html += nick.map(a => acctHTML(a)).join('');
+  html += '<div style="font-size:10px;color:var(--text-muted);font-weight:700;letter-spacing:1px;text-transform:uppercase;margin:10px 0 6px;">— Fancie —</div>';
+  html += fancie.map(a => acctHTML(a)).join('');
+  document.getElementById('acct-list').innerHTML = html;
+
+  document.getElementById('count-chip').textContent = selected.size + ' selected';
+}
+
+function acctHTML(a) {
+  const isChecked = selected.has(a.id);
+  const isDup = a.duplicateCollector || a.id.startsWith('cf_co');
+  return `<div class="acct-item ${isChecked?'checked':''}" onclick="toggleAcct('${a.id}')">
+    <div class="acct-top">
+      <div class="acct-check">${isChecked?'✓':''}</div>
+      <div class="acct-name">${a.name}</div>
+      <span class="letter-tag ${TYPE_CLASSES[a.letterType]}">${TYPE_LABELS[a.letterType]}</span>
+    </div>
+    <div class="acct-sub">
+      <span style="color:${a.type==='chargeoff'?'var(--orange)':'var(--red)'}">$${a.balance.toLocaleString()}</span>
+      <span>${a.months_ago} mo. ago</span>
+      ${isDup?'<span style="color:var(--purple);font-weight:700;">⚡ Duplicate</span>':''}
+    </div>
+    <div class="strategy-note">${a.strategy.substring(0,90)}${a.strategy.length>90?'…':''}</div>
+  </div>`;
+}
+
+// ── GENERATE LETTERS ──────────────────────────────────────────────────
+function generateLetters() {
+  if (selected.size === 0) return;
+  const letters = [];
+
+  selected.forEach(id => {
+    const a = ACCOUNTS.find(x=>x.id===id);
+    if (!a) return;
+
+    if (a.letterType === 'dv' && a.collector) {
+      letters.push({ title:`Debt Validation — ${a.name} (${a.who})`, type:'DV', tag:'tag-dv', content: generateDV(a), acct:a });
+    }
+    if (a.letterType === 'pfd' && a.collector) {
+      letters.push({ title:`Pay-for-Delete — ${a.name} (${a.who})`, type:'P4D', tag:'tag-pfd', content: generatePFD(a), acct:a });
+    }
+    // Bureau disputes
+    if (a.letterType === 'bd' || a.letterType === 'dv' || a.letterType === 'pfd') {
+      (a.bureaus || []).forEach(b => {
+        letters.push({ title:`Bureau Dispute (${b.charAt(0).toUpperCase()+b.slice(1)}) — ${a.name} (${a.who})`, type:'BD', tag:'tag-bd', content: generateBD(a, b), acct:a });
+      });
+    }
+  });
+
+  document.getElementById('empty-state').style.display = 'none';
+  document.getElementById('letter-list').innerHTML = letters.map((l,i) => `
+    <div class="card">
+      <div class="letter-header-bar">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span class="letter-tag ${l.tag}">${l.type}</span>
+          <span style="font-size:13px;font-weight:700;">${l.title}</span>
+        </div>
+        <div class="letter-actions">
+          <button class="print-btn" onclick="printLetter(${i})">🖨 Print</button>
+        </div>
+      </div>
+      <div class="card-body" style="background:#f5f5f0;border-radius:0 0 10px 10px;padding:20px;">
+        <div class="letter-paper" id="letter-${i}">${l.content}</div>
+      </div>
+    </div>
+  `).join('');
+
+  switchTab('generated');
+}
+
+function printLetter(i) {
+  const content = document.getElementById('letter-'+i).innerHTML;
+  const win = window.open('','_blank','width=800,height=900');
+  win.document.write(`<!DOCTYPE html><html><head><style>
+    body{font-family:'Times New Roman',serif;font-size:13px;line-height:1.7;padding:48px 56px;color:#1a1a1a;max-width:680px;margin:0 auto;}
+    p{margin-bottom:14px;} ul{margin:10px 0 10px 24px;} li{margin-bottom:6px;}
+    .letter-sig{margin-top:32px;} .letter-cert{margin-top:16px;font-size:11px;color:#555;font-style:italic;}
+    .letter-re{margin-bottom:20px;font-weight:bold;} .letter-to{margin-bottom:24px;line-height:1.6;}
+    .letter-from{margin-bottom:20px;line-height:1.6;} .letter-date{margin-bottom:20px;}
+  </style></head><body>${content}</body></html>`);
+  win.document.close();
+  win.print();
+}
+
+// ── STRATEGY TABLE ────────────────────────────────────────────────────
+function renderStrategy() {
+  const rows = [
+    { phase:'Week 1', action:'Send Debt Validation letters to all collectors (LVNV, Portfolio Recovery, Midland, Jefferson Capital, TrueAccord)', notes:'Certified mail only. Gives collectors 30 days to respond.' },
+    { phase:'Week 1', action:'Send Pay-for-Delete offers to Target/TrueAccord ($300), Midland/Comenity #3 ($400), Jefferson Capital/Mission Lane ($300)', notes:'Small balances — high success rate for PFD.' },
+    { phase:'Week 5-6', action:'If collectors did NOT respond to DV → send Bureau Dispute letters to all three bureaus citing non-validation', notes:'Non-response to DV = strong grounds for bureau removal.' },
+    { phase:'Week 5-6', action:'Dispute duplicate tradelines with all three bureaus', notes:'Capital One charge-off + Portfolio RC, Credit One + Portfolio RC, Target + TrueAccord.' },
+    { phase:'Week 8+', action:'Follow up on bureau investigations — expect results letters from each bureau', notes:'30-45 day window from date bureaus receive letters.' },
+    { phase:'30 Days', action:'Pull new credit report and document changes', notes:'Use MYFICO or AnnualCreditReport.com to verify removals.' },
+  ];
+
+  document.getElementById('strategy-table').innerHTML = `
+    <table style="width:100%;border-collapse:collapse;">
+      <thead><tr>
+        <th style="font-size:10px;text-transform:uppercase;letter-spacing:0.8px;color:var(--text-muted);text-align:left;padding:0 0 10px;width:80px;">Phase</th>
+        <th style="font-size:10px;text-transform:uppercase;letter-spacing:0.8px;color:var(--text-muted);text-align:left;padding:0 0 10px;">Action</th>
+        <th style="font-size:10px;text-transform:uppercase;letter-spacing:0.8px;color:var(--text-muted);text-align:left;padding:0 0 10px;width:180px;">Notes</th>
+      </tr></thead>
+      <tbody>${rows.map(r=>`<tr style="border-top:1px solid var(--border);">
+        <td style="padding:10px 8px 10px 0;font-size:11px;font-weight:700;color:var(--gold);vertical-align:top;">${r.phase}</td>
+        <td style="padding:10px 8px;font-size:12px;color:var(--text);vertical-align:top;">${r.action}</td>
+        <td style="padding:10px 0;font-size:11px;color:var(--text-dim);vertical-align:top;">${r.notes}</td>
+      </tr>`).join('')}</tbody>
+    </table>`;
+
+  const dups = ACCOUNTS.filter(a=>a.duplicateCollector);
+  document.getElementById('duplicate-list').innerHTML = dups.map(a=>`
+    <div style="background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--purple);border-radius:8px;padding:12px 14px;margin-bottom:8px;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+        <span style="font-size:12px;font-weight:700;">${a.originalCreditor} → ${a.name}</span>
+        <span style="font-size:9px;background:var(--purple-dim);color:var(--purple);border:1px solid rgba(167,139,250,0.3);padding:2px 6px;border-radius:3px;font-weight:700;">DUPLICATE</span>
+      </div>
+      <div style="font-size:11px;color:var(--text-dim);">${a.strategy}</div>
+    </div>`).join('');
+}
+
+// ── ACTIONS ───────────────────────────────────────────────────────────
+function toggleAcct(id) {
+  if (selected.has(id)) selected.delete(id); else selected.add(id);
+  renderList();
+}
+function selectAll() { ACCOUNTS.forEach(a=>selected.add(a.id)); renderList(); }
+function clearAll() { selected.clear(); renderList(); document.getElementById('empty-state').style.display=''; document.getElementById('letter-list').innerHTML=''; }
+function switchTab(tab) {
+  activeTab = tab;
+  document.getElementById('tab-generated').className = 'tab' + (tab==='generated'?' active':'');
+  document.getElementById('tab-strategy').className = 'tab' + (tab==='strategy'?' active':'');
+  document.getElementById('panel-generated').style.display = tab==='generated'?'':'none';
+  document.getElementById('panel-strategy').style.display = tab==='strategy'?'':'none';
+}
+
+// ── INIT ──────────────────────────────────────────────────────────────
+renderList();
+renderStrategy();
+
+// ── SUPABASE SESSION GUARD + CLIENT BANNER
+(async function() {
+  const { createClient } = supabase;
+  const sb = createClient(LEVRAGE_CONFIG.supabaseUrl, LEVRAGE_CONFIG.supabaseKey);
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { window.location.href = 'LeVrage_login.html'; return; }
+
+  const params = new URLSearchParams(window.location.search);
+  const clientId = params.get('clientId');
+  let d = null;
+
+  if (clientId) {
+    const { data } = await sb.from('clients').select('*').eq('id', clientId).single();
+    if (data) {
+      const report = data.report_history?.slice(-1)[0] || null;
+      d = { clientName: data.name, pullDate: report?.pullDate, negativeCount: report?.negativeCount };
+    }
+  } else {
+    try { d = JSON.parse(localStorage.getItem('levrage_import') || 'null'); } catch(e) {}
+  }
+
+  if (!d || !d.clientName || d.clientName === 'Unknown Client') return;
+  document.getElementById('cbName').textContent = d.clientName;
+  document.getElementById('cbMeta').textContent = `${d.negativeCount || 0} negative items · Pulled ${d.pullDate || '—'}`;
+  document.getElementById('clientBanner').style.display = 'flex';
+  if (document.getElementById('dlClientName'))
+    document.getElementById('dlClientName').textContent = d.clientName;
+})();
+</script>
+</body>
+</html>

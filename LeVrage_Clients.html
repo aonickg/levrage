@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LeVrage — Client Roster</title>
+<script src="levrage_config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #0f0f0f; --surface: #1a1a1a; --card: #222; --border: #333;
+  --gold: #C8A96E; --gold2: #a8843e; --gold-glow: rgba(200,169,110,0.12);
+  --text: #f0f0f0; --muted: #888; --dim: #444;
+  --green: #2ecc71; --red: #e74c3c; --orange: #f39c12; --blue: #3498db;
+  --radius: 12px; --radius-sm: 8px;
+}
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+/* HEADER */
+.hdr { background: #111; border-bottom: 1px solid var(--border); padding: 0 28px; height: 60px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
+.brand { font-size: 22px; font-weight: 800; color: var(--gold); }
+.brand span { color: var(--text); font-weight: 300; }
+.hdr-right { display: flex; align-items: center; gap: 12px; }
+.lo-name { font-size: 13px; color: var(--muted); }
+.lo-company { font-size: 11px; color: var(--dim); }
+.signout-btn { font-size: 12px; color: var(--dim); cursor: pointer; padding: 5px 10px; border: 1px solid var(--border); border-radius: 6px; background: transparent; transition: color 0.2s, border-color 0.2s; }
+.signout-btn:hover { color: var(--red); border-color: var(--red); }
+
+/* PAGE */
+.page { max-width: 1000px; margin: 0 auto; padding: 28px 24px 80px; }
+
+/* TOOLBAR */
+.toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; gap: 12px; flex-wrap: wrap; }
+.toolbar-left { display: flex; align-items: center; gap: 10px; flex: 1; }
+.search-wrap { position: relative; flex: 1; max-width: 300px; }
+.search-wrap input { width: 100%; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text); font-size: 13px; padding: 8px 12px 8px 34px; outline: none; transition: border-color 0.2s; }
+.search-wrap input:focus { border-color: var(--gold); }
+.search-icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-size: 14px; color: var(--muted); pointer-events: none; }
+.filter-select { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--muted); font-size: 12px; padding: 8px 10px; outline: none; cursor: pointer; }
+
+/* BUTTONS */
+.btn { padding: 9px 18px; border: none; border-radius: var(--radius-sm); font-size: 13px; font-weight: 700; cursor: pointer; transition: opacity 0.2s, transform 0.1s; white-space: nowrap; }
+.btn:active { transform: scale(0.97); }
+.btn-gold { background: linear-gradient(135deg, var(--gold2), var(--gold)); color: #111; }
+.btn-gold:hover { opacity: 0.9; }
+.btn-outline { background: transparent; border: 1px solid var(--border); color: var(--muted); }
+.btn-outline:hover { border-color: var(--gold); color: var(--gold); }
+.btn-danger { background: transparent; border: 1px solid rgba(231,76,60,0.3); color: var(--red); }
+.btn-danger:hover { background: rgba(231,76,60,0.08); }
+.btn-sm { padding: 5px 10px; font-size: 11px; }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* STATS */
+.stats-bar { display: flex; gap: 14px; margin-bottom: 24px; flex-wrap: wrap; }
+.stat-pill { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 16px; }
+.stat-val { font-size: 22px; font-weight: 800; }
+.stat-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+
+/* CLIENT GRID */
+.client-grid { display: flex; flex-direction: column; gap: 10px; }
+.client-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center; transition: border-color 0.2s; }
+.client-card:hover { border-color: var(--gold2); }
+.client-card.active-client { border-color: var(--green); background: rgba(46,204,113,0.04); }
+.cc-name { font-size: 16px; font-weight: 700; }
+.cc-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+.cc-goal { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 20px; background: var(--gold-glow); border: 1px solid var(--gold2); color: var(--gold); }
+.cc-active-badge { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 20px; background: rgba(46,204,113,0.12); border: 1px solid rgba(46,204,113,0.3); color: var(--green); }
+.cc-meta { font-size: 12px; color: var(--muted); display: flex; gap: 14px; flex-wrap: wrap; }
+.score-chip { font-size: 13px; font-weight: 800; padding: 2px 8px; border-radius: 6px; }
+.score-green { background: rgba(46,204,113,0.15); color: var(--green); }
+.score-gold  { background: var(--gold-glow); color: var(--gold); }
+.score-orange { background: rgba(243,156,18,0.15); color: var(--orange); }
+.score-red   { background: rgba(231,76,60,0.15); color: var(--red); }
+.cc-actions { display: flex; gap: 7px; flex-wrap: wrap; justify-content: flex-end; }
+.delta-up { color: var(--green); font-size: 11px; font-weight: 700; }
+.delta-down { color: var(--red); font-size: 11px; font-weight: 700; }
+
+/* EMPTY */
+.empty-state { text-align: center; padding: 60px 20px; color: var(--muted); }
+.empty-icon { font-size: 48px; margin-bottom: 16px; }
+.empty-title { font-size: 18px; font-weight: 700; color: var(--text); margin-bottom: 8px; }
+.empty-sub { font-size: 14px; margin-bottom: 24px; line-height: 1.6; }
+
+/* LOADING */
+.loading { text-align: center; padding: 60px; color: var(--muted); font-size: 14px; }
+.spinner-lg { width: 32px; height: 32px; border: 3px solid var(--border); border-top-color: var(--gold); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 16px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* MODAL */
+.modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 200; align-items: center; justify-content: center; padding: 20px; }
+.modal-overlay.open { display: flex; }
+.modal { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; width: 100%; max-width: 480px; max-height: 90vh; overflow-y: auto; }
+.modal-title { font-size: 18px; font-weight: 800; margin-bottom: 20px; }
+.field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px; }
+.field label { font-size: 11px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
+.field input, .field select, .field textarea { background: #111; border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text); font-size: 14px; padding: 9px 12px; outline: none; font-family: inherit; transition: border-color 0.2s; }
+.field input:focus, .field textarea:focus { border-color: var(--gold); }
+.field select { cursor: pointer; }
+.field textarea { resize: vertical; min-height: 70px; font-size: 13px; }
+.field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.modal-footer { display: flex; gap: 10px; margin-top: 20px; justify-content: flex-end; }
+.modal-msg { font-size: 13px; padding: 8px 12px; border-radius: 6px; margin-top: 10px; display: none; }
+.modal-msg.error { background: rgba(231,76,60,0.1); color: #e88; border: 1px solid rgba(231,76,60,0.3); display: block; }
+
+/* CONFIRM */
+.confirm-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 300; align-items: center; justify-content: center; padding: 20px; }
+.confirm-overlay.open { display: flex; }
+.confirm-box { background: var(--surface); border: 1px solid var(--red); border-radius: var(--radius); padding: 24px; max-width: 380px; width: 100%; text-align: center; }
+.confirm-msg { font-size: 15px; font-weight: 700; margin-bottom: 6px; }
+.confirm-sub { font-size: 13px; color: var(--muted); margin-bottom: 20px; }
+.confirm-btns { display: flex; gap: 10px; justify-content: center; }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="hdr">
+  <div class="brand">LeV<span>rage</span></div>
+  <div class="hdr-right">
+    <div style="text-align:right;">
+      <div class="lo-name" id="loName">Loading...</div>
+      <div class="lo-company" id="loCompany"></div>
+    </div>
+    <button class="signout-btn" onclick="signOut()">Sign Out</button>
+  </div>
+</div>
+
+<div class="page">
+  <div class="toolbar">
+    <div class="toolbar-left">
+      <div class="search-wrap">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="searchInput" placeholder="Search clients..." oninput="renderRoster()">
+      </div>
+      <select class="filter-select" id="goalFilter" onchange="renderRoster()">
+        <option value="">All Goals</option>
+        <option value="FHA Purchase">FHA Purchase</option>
+        <option value="Conventional Purchase">Conventional Purchase</option>
+        <option value="Conventional Refi">Conventional Refi</option>
+        <option value="FHA Streamline">FHA Streamline</option>
+        <option value="Auto">Auto</option>
+        <option value="Score Only">Score Only</option>
+      </select>
+    </div>
+    <button class="btn btn-gold" onclick="openNewClientModal()">+ New Client</button>
+  </div>
+
+  <div class="stats-bar">
+    <div class="stat-pill"><div class="stat-val" id="statTotal">—</div><div class="stat-label">Total Clients</div></div>
+    <div class="stat-pill"><div class="stat-val" style="color:var(--green)" id="statActive">—</div><div class="stat-label">With Reports</div></div>
+    <div class="stat-pill"><div class="stat-val" style="color:var(--gold)" id="statAvgScore">—</div><div class="stat-label">Avg Middle Score</div></div>
+    <div class="stat-pill"><div class="stat-val" style="color:var(--red)" id="statNeg">—</div><div class="stat-label">Total Negatives</div></div>
+  </div>
+
+  <div class="client-grid" id="clientGrid">
+    <div class="loading"><div class="spinner-lg"></div>Loading clients...</div>
+  </div>
+</div>
+
+<!-- NEW / EDIT MODAL -->
+<div class="modal-overlay" id="clientModal">
+  <div class="modal">
+    <div class="modal-title" id="modalTitle">New Client</div>
+    <div class="field-row">
+      <div class="field"><label>Full Name *</label><input type="text" id="f_name" placeholder="Nick Gegovic"></div>
+      <div class="field"><label>Phone</label><input type="text" id="f_phone" placeholder="555-000-0000"></div>
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label>Goal *</label>
+        <select id="f_goal">
+          <option value="">Select goal...</option>
+          <option value="FHA Purchase">FHA Purchase</option>
+          <option value="Conventional Purchase">Conventional Purchase</option>
+          <option value="Conventional Refi">Conventional Refi</option>
+          <option value="FHA Streamline">FHA Streamline</option>
+          <option value="Auto">Auto</option>
+          <option value="Score Only">Score Only</option>
+        </select>
+      </div>
+      <div class="field"><label>Target Close Date</label><input type="date" id="f_closeDate"></div>
+    </div>
+    <div class="field"><label>Notes</label><textarea id="f_notes" placeholder="Co-borrower info, urgency, strategy..."></textarea></div>
+    <div class="modal-msg" id="modalMsg"></div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-gold" id="saveBtn" onclick="saveClient()">Save Client</button>
+    </div>
+  </div>
+</div>
+
+<!-- CONFIRM DELETE -->
+<div class="confirm-overlay" id="confirmOverlay">
+  <div class="confirm-box">
+    <div style="font-size:32px;margin-bottom:12px;">🗑️</div>
+    <div class="confirm-msg">Delete this client?</div>
+    <div class="confirm-sub" id="confirmSub"></div>
+    <div class="confirm-btns">
+      <button class="btn btn-outline" onclick="closeConfirm()">Cancel</button>
+      <button class="btn btn-danger" onclick="confirmDelete()">Delete</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const { createClient } = supabase;
+const sb = createClient(LEVRAGE_CONFIG.supabaseUrl, LEVRAGE_CONFIG.supabaseKey);
+
+let session = null;
+let roster  = [];
+let editingId = null;
+let deleteTargetId = null;
+let activeClientId = null;
+
+/* ── INIT ── */
+(async function init() {
+  const { data: { session: s } } = await sb.auth.getSession();
+  if (!s) { window.location.href = 'LeVrage_login.html'; return; }
+  session = s;
+
+  // Load LO profile
+  const { data: profile } = await sb.from('lo_profiles').select('*').eq('id', s.user.id).single();
+  document.getElementById('loName').textContent = profile?.full_name || s.user.email;
+  document.getElementById('loCompany').textContent = profile?.company || '';
+
+  // Check for active client in localStorage
+  try {
+    const imp = JSON.parse(localStorage.getItem('levrage_import') || '{}');
+    activeClientId = imp.clientId || null;
+  } catch(e) {}
+
+  // Check if returning from PDF parser with a new report to save
+  await checkPendingImport();
+
+  await loadRoster();
+})();
+
+/* ── LOAD ROSTER ── */
+async function loadRoster() {
+  const { data, error } = await sb
+    .from('clients')
+    .select('*')
+    .order('last_active', { ascending: false, nullsFirst: false });
+
+  if (error) { console.error(error); return; }
+  roster = data || [];
+  renderRoster();
+}
+
+/* ── RENDER ── */
+function renderRoster() {
+  const search = document.getElementById('searchInput').value.toLowerCase();
+  const goalFilter = document.getElementById('goalFilter').value;
+
+  let filtered = roster.filter(c => {
+    const matchSearch = !search || c.name.toLowerCase().includes(search) || (c.phone||'').includes(search);
+    const matchGoal = !goalFilter || c.goal === goalFilter;
+    return matchSearch && matchGoal;
+  });
+
+  // Stats
+  const withReports = roster.filter(c => c.report_history && c.report_history.length > 0);
+  const scores = withReports.flatMap(c => {
+    const r = c.report_history[c.report_history.length - 1];
+    return (r?.borrowers || []).map(b => getMiddle(b)).filter(Boolean);
+  });
+  const avg = scores.length ? Math.round(scores.reduce((a,b)=>a+b,0)/scores.length) : null;
+  const totalNeg = roster.reduce((s,c) => s + (c.report_history?.[c.report_history.length-1]?.negativeCount || 0), 0);
+
+  document.getElementById('statTotal').textContent = roster.length;
+  document.getElementById('statActive').textContent = withReports.length;
+  document.getElementById('statAvgScore').textContent = avg || '—';
+  document.getElementById('statNeg').textContent = totalNeg;
+
+  const grid = document.getElementById('clientGrid');
+
+  if (filtered.length === 0) {
+    grid.innerHTML = `<div class="empty-state">
+      <div class="empty-icon">${roster.length === 0 ? '👤' : '🔍'}</div>
+      <div class="empty-title">${roster.length === 0 ? 'No clients yet' : 'No results'}</div>
+      <div class="empty-sub">${roster.length === 0 ? 'Add your first client to get started.' : 'Try a different search or filter.'}</div>
+      ${roster.length === 0 ? '<button class="btn btn-gold" onclick="openNewClientModal()">+ Add First Client</button>' : ''}
+    </div>`;
+    return;
+  }
+
+  grid.innerHTML = filtered.map(client => {
+    const isActive = client.id === activeClientId;
+    const history = client.report_history || [];
+    const report = history.length > 0 ? history[history.length - 1] : null;
+    const baseline = history.length > 1 ? history[0] : null;
+
+    const primaryBorrower = report?.borrowers?.[0];
+    const primaryMiddle = primaryBorrower ? getMiddle(primaryBorrower) : null;
+    const baselineMiddle = baseline?.borrowers?.[0] ? getMiddle(baseline.borrowers[0]) : null;
+    const delta = (primaryMiddle && baselineMiddle) ? primaryMiddle - baselineMiddle : null;
+
+    const lastActive = client.last_active
+      ? new Date(client.last_active).toLocaleDateString('en-US', { month:'short', day:'numeric' })
+      : 'Never opened';
+
+    return `
+    <div class="client-card ${isActive ? 'active-client' : ''}">
+      <div>
+        <div class="cc-top">
+          <div class="cc-name">${client.name}</div>
+          ${client.goal ? `<div class="cc-goal">${client.goal}</div>` : ''}
+          ${isActive ? '<div class="cc-active-badge">● Active</div>' : ''}
+        </div>
+        <div class="cc-meta">
+          ${primaryMiddle
+            ? `<span>Score: <span class="score-chip ${scoreColor(primaryMiddle)}">${primaryMiddle}</span>
+               ${delta !== null ? `<span class="${delta>=0?'delta-up':'delta-down'}">${delta>=0?'↑+':'↓'}${delta}</span>` : ''}</span>`
+            : '<span style="color:var(--dim)">No report</span>'}
+          ${report ? `<span>📄 ${history.length} pull${history.length !== 1 ? 's' : ''} · ${report.pullDate || '—'}</span>` : ''}
+          ${client.phone ? `<span>📞 ${client.phone}</span>` : ''}
+          <span>🕐 ${lastActive}</span>
+          ${report ? `<span style="color:var(--red)">⚠ ${report.negativeCount || 0} negatives</span>` : ''}
+          ${client.close_date ? `<span>🎯 Close: ${client.close_date}</span>` : ''}
+        </div>
+      </div>
+      <div class="cc-actions">
+        ${report ? `
+          <button class="btn btn-sm btn-gold"    onclick="openTool('${client.id}','app')">Engine</button>
+          <button class="btn btn-sm btn-outline"  onclick="openTool('${client.id}','sim')">Sim</button>
+          <button class="btn btn-sm btn-outline"  onclick="openTool('${client.id}','dispute')">Letters</button>
+          <button class="btn btn-sm btn-outline"  onclick="openTool('${client.id}','bridge')">Cash</button>
+        ` : `
+          <button class="btn btn-sm btn-outline" onclick="openTool('${client.id}','parser')">Upload Report</button>
+        `}
+        <button class="btn btn-sm btn-outline" onclick="openEditModal('${client.id}')">Edit</button>
+        <button class="btn btn-sm btn-danger"   onclick="promptDelete('${client.id}','${client.name.replace(/'/g,"\\'")}')">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+/* ── SCORE HELPERS ── */
+function getMiddle(b) {
+  const s = [b.eq, b.tu, b.ex].filter(x => typeof x === 'number' && x > 0).sort((a,b)=>a-b);
+  return s.length === 3 ? s[1] : (s[0] || null);
+}
+function scoreColor(s) {
+  if (!s) return 'score-red';
+  if (s >= 660) return 'score-green';
+  if (s >= 620) return 'score-gold';
+  if (s >= 580) return 'score-orange';
+  return 'score-red';
+}
+
+/* ── OPEN TOOL ── */
+async function openTool(clientId, tool) {
+  await setActiveClient(clientId);
+  const map = { app:'LeVrage_app.html', sim:'LeVrage_Simulator.html', dispute:'LeVrage_DisputeLetters.html', bridge:'LeVrage_CashBridge.html', parser:'LeVrage_PDFParser.html' };
+  window.open(`${map[tool]}?clientId=${clientId}`, '_blank');
+}
+
+async function setActiveClient(clientId) {
+  const client = roster.find(c => c.id === clientId);
+  if (!client) return;
+  const history = client.report_history || [];
+  const report = history.length > 0 ? history[history.length - 1] : null;
+
+  localStorage.setItem('levrage_import', JSON.stringify({
+    clientId:      client.id,
+    clientName:    client.name,
+    clientPhone:   client.phone || '',
+    pullDate:      report?.pullDate || '',
+    reportId:      report?.reportId || '',
+    accounts:      report?.accounts || [],
+    borrowers:     report?.borrowers || [],
+    negativeCount: report?.negativeCount || 0,
+  }));
+  activeClientId = clientId;
+
+  // Update last_active in Supabase
+  await sb.from('clients').update({ last_active: new Date().toISOString() }).eq('id', clientId);
+}
+
+/* ── CHECK PENDING IMPORT (returning from PDF parser) ── */
+async function checkPendingImport() {
+  try {
+    const imp = JSON.parse(localStorage.getItem('levrage_import') || '{}');
+    if (!imp.clientId || !imp.pullDate) return;
+
+    const client = roster.find(c => c.id === imp.clientId);
+    if (!client) return;
+
+    const history = client.report_history || [];
+    const alreadySaved = history.some(r => r.pullDate === imp.pullDate && r.reportId === imp.reportId);
+    if (alreadySaved) return;
+
+    // Append new pull to history
+    const newEntry = {
+      pullDate:     imp.pullDate,
+      reportId:     imp.reportId || '',
+      accounts:     imp.accounts || [],
+      borrowers:    imp.borrowers || [],
+      negativeCount: imp.negativeCount || 0,
+      savedAt:      new Date().toISOString(),
+    };
+
+    const updatedHistory = [...history, newEntry];
+    await sb.from('clients').update({
+      report_history:   updatedHistory,
+      latest_pull_date: imp.pullDate || null,
+      last_active:      new Date().toISOString(),
+    }).eq('id', imp.clientId);
+
+  } catch(e) { console.error(e); }
+}
+
+/* ── NEW / EDIT CLIENT ── */
+function openNewClientModal() {
+  editingId = null;
+  document.getElementById('modalTitle').textContent = 'New Client';
+  ['f_name','f_phone','f_notes'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('f_goal').value = '';
+  document.getElementById('f_closeDate').value = '';
+  document.getElementById('modalMsg').className = 'modal-msg';
+  document.getElementById('clientModal').classList.add('open');
+  setTimeout(() => document.getElementById('f_name').focus(), 100);
+}
+
+function openEditModal(id) {
+  const client = roster.find(c => c.id === id);
+  if (!client) return;
+  editingId = id;
+  document.getElementById('modalTitle').textContent = 'Edit Client';
+  document.getElementById('f_name').value       = client.name || '';
+  document.getElementById('f_phone').value      = client.phone || '';
+  document.getElementById('f_goal').value       = client.goal || '';
+  document.getElementById('f_closeDate').value  = client.close_date || '';
+  document.getElementById('f_notes').value      = client.notes || '';
+  document.getElementById('modalMsg').className = 'modal-msg';
+  document.getElementById('clientModal').classList.add('open');
+}
+
+function closeModal() { document.getElementById('clientModal').classList.remove('open'); editingId = null; }
+
+async function saveClient() {
+  const name = document.getElementById('f_name').value.trim();
+  if (!name) { showModalMsg('Client name is required.'); return; }
+
+  const btn = document.getElementById('saveBtn');
+  btn.disabled = true; btn.textContent = 'Saving...';
+
+  const payload = {
+    name,
+    phone:      document.getElementById('f_phone').value.trim() || null,
+    goal:       document.getElementById('f_goal').value || null,
+    close_date: document.getElementById('f_closeDate').value || null,
+    notes:      document.getElementById('f_notes').value.trim() || null,
+  };
+
+  let error;
+  if (editingId) {
+    ({ error } = await sb.from('clients').update(payload).eq('id', editingId));
+  } else {
+    ({ error } = await sb.from('clients').insert({ ...payload, lo_id: session.user.id, report_history: [] }));
+  }
+
+  btn.disabled = false; btn.textContent = 'Save Client';
+  if (error) { showModalMsg(error.message); return; }
+
+  closeModal();
+  await loadRoster();
+}
+
+function showModalMsg(msg) {
+  const el = document.getElementById('modalMsg');
+  el.textContent = msg;
+  el.className = 'modal-msg error';
+}
+
+/* ── DELETE ── */
+function promptDelete(id, name) {
+  deleteTargetId = id;
+  document.getElementById('confirmSub').textContent = `"${name}" and all their report history will be permanently removed.`;
+  document.getElementById('confirmOverlay').classList.add('open');
+}
+function closeConfirm() { document.getElementById('confirmOverlay').classList.remove('open'); deleteTargetId = null; }
+
+async function confirmDelete() {
+  if (!deleteTargetId) return;
+  await sb.from('clients').delete().eq('id', deleteTargetId);
+  if (activeClientId === deleteTargetId) { localStorage.removeItem('levrage_import'); activeClientId = null; }
+  closeConfirm();
+  await loadRoster();
+}
+
+/* ── SIGN OUT ── */
+async function signOut() {
+  await sb.auth.signOut();
+  localStorage.removeItem('levrage_import');
+  window.location.href = 'LeVrage_login.html';
+}
+
+/* ── KEYBOARD ── */
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeModal(); closeConfirm(); } });
+document.getElementById('clientModal').addEventListener('click', e => { if (e.target === document.getElementById('clientModal')) closeModal(); });
+</script>
+</body>
+</html>

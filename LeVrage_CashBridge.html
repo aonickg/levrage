@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LeVrage — Cash Flow → Credit Bridge</title>
+<script src="levrage_config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root {
+    --bg:#0f1117;--surface:#1a1d27;--surface2:#22263a;--border:#2e3354;
+    --gold:#c9a84c;--gold-light:#e8c96a;--gold-dim:rgba(201,168,76,0.15);
+    --text:#e8e8f0;--text-dim:#8890b0;--text-muted:#555d80;
+    --green:#3ecf8e;--green-dim:rgba(62,207,142,0.12);
+    --red:#f04f5a;--red-dim:rgba(240,79,90,0.12);
+    --orange:#f5a623;--orange-dim:rgba(245,166,35,0.12);
+    --blue:#4e9eff;--blue-dim:rgba(78,158,255,0.12);
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
+  .header{background:var(--surface);border-bottom:1px solid var(--border);padding:0 28px;height:60px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;}
+  .logo{font-size:20px;font-weight:800;color:var(--gold);}
+  .logo span{color:var(--text-dim);font-weight:400;font-size:12px;margin-left:8px;}
+  .badge{background:var(--gold-dim);color:var(--gold);border:1px solid rgba(201,168,76,0.3);padding:3px 9px;border-radius:20px;font-size:10px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;}
+  .page{max-width:1100px;margin:0 auto;padding:24px;}
+  .grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;}
+  .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+  .card{background:var(--surface2);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:14px;}
+  .card-header{padding:11px 15px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+  .card-title{font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text-dim);}
+  .card-body{padding:15px;}
+  .stat-box{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;text-align:center;}
+  .stat-label{font-size:9px;text-transform:uppercase;letter-spacing:0.8px;color:var(--text-muted);font-weight:700;margin-bottom:5px;}
+  .stat-val{font-size:22px;font-weight:800;font-variant-numeric:tabular-nums;}
+  .stat-sub{font-size:10px;color:var(--text-dim);margin-top:3px;}
+  .section-label{font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);margin-bottom:8px;}
+
+  /* Category bars */
+  .cat-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);}
+  .cat-row:last-child{border-bottom:none;}
+  .cat-name{font-size:12px;font-weight:600;width:160px;flex-shrink:0;}
+  .cat-bar-wrap{flex:1;height:6px;background:var(--border);border-radius:3px;overflow:hidden;}
+  .cat-bar{height:100%;border-radius:3px;}
+  .cat-amt{font-size:12px;font-weight:700;font-variant-numeric:tabular-nums;min-width:60px;text-align:right;}
+  .cat-pct{font-size:10px;color:var(--text-muted);min-width:36px;text-align:right;}
+  .cut-toggle{font-size:9px;font-weight:700;padding:2px 7px;border-radius:4px;border:1px solid;cursor:pointer;margin-left:6px;white-space:nowrap;background:transparent;transition:all 0.15s;}
+
+  /* Redirect cards */
+  .redirect-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;position:relative;overflow:hidden;}
+  .redirect-card.active{border-color:var(--green);background:var(--green-dim);}
+  .redirect-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px;}
+  .redirect-name{font-size:13px;font-weight:700;}
+  .redirect-pts{font-size:18px;font-weight:800;color:var(--green);}
+  .redirect-body{font-size:11px;color:var(--text-dim);line-height:1.5;}
+  .redirect-arrow{display:flex;align-items:center;gap:6px;margin-top:8px;font-size:11px;font-weight:700;}
+  .pill{display:inline-block;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;}
+  .pill-red{background:var(--red-dim);color:var(--red);}
+  .pill-green{background:var(--green-dim);color:var(--green);}
+  .pill-gold{background:var(--gold-dim);color:var(--gold);}
+
+  /* Month plan */
+  .month-row{display:flex;align-items:flex-start;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);}
+  .month-row:last-child{border-bottom:none;}
+  .month-num{width:64px;flex-shrink:0;text-align:center;}
+  .month-circle{width:36px;height:36px;border-radius:50%;background:var(--surface);border:2px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;margin:0 auto;}
+  .month-circle.active{border-color:var(--gold);color:var(--gold);}
+  .month-label{font-size:9px;color:var(--text-muted);margin-top:3px;text-align:center;}
+  .month-content{flex:1;}
+  .month-title{font-size:13px;font-weight:700;margin-bottom:3px;}
+  .month-desc{font-size:11px;color:var(--text-dim);line-height:1.5;}
+  .month-impact{font-size:11px;font-weight:700;color:var(--green);margin-top:4px;}
+
+  .slider-group{display:flex;flex-direction:column;gap:10px;}
+  .slider-row{display:flex;align-items:center;gap:10px;}
+  .slider-label{font-size:11px;color:var(--text-dim);flex:1;}
+  .slider-val{font-size:12px;font-weight:700;color:var(--gold);min-width:56px;text-align:right;font-variant-numeric:tabular-nums;}
+  input[type=range]{-webkit-appearance:none;width:100%;height:3px;border-radius:2px;background:var(--border);outline:none;}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;border-radius:50%;background:var(--gold);cursor:pointer;}
+
+  ::-webkit-scrollbar{width:5px;}::-webkit-scrollbar-track{background:transparent;}::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
+</style>
+</head>
+<body>
+<!-- CLIENT BANNER -->
+<div id="clientBanner" style="display:none;align-items:center;justify-content:space-between;background:linear-gradient(90deg,#1a1500,#111);border-bottom:1px solid #a8843e;padding:7px 20px;font-size:12px;">
+  <div style="display:flex;align-items:center;gap:8px;">
+    <div style="width:7px;height:7px;border-radius:50%;background:#2ecc71;flex-shrink:0;"></div>
+    <span id="cbName" style="font-weight:700;color:#f0f0f0;"></span>
+    <span id="cbMeta" style="color:#888;"></span>
+  </div>
+  <span style="font-size:10px;color:#555;letter-spacing:0.1em;text-transform:uppercase;">Cash Bridge</span>
+</div>
+
+<div class="header">
+  <div class="logo">LeVrage <span>Cash Flow → Credit Bridge</span></div>
+  <div style="display:flex;align-items:center;gap:10px;">
+    <span style="font-size:12px;color:var(--text-dim)" id="cbHeaderName">Gegovic Household · 90-Day Analysis</span>
+    <span class="badge">Dec 2025 – Mar 2026</span>
+  </div>
+</div>
+
+<div class="page">
+
+  <!-- BASELINE NUMBERS -->
+  <div class="section-label">Household Cash Flow Baseline (90-Day Avg)</div>
+  <div class="grid-3" style="margin-bottom:20px;">
+    <div class="stat-box">
+      <div class="stat-label">Avg Monthly Income</div>
+      <div class="stat-val" style="color:var(--green)">$7,726</div>
+      <div class="stat-sub">Nick + Fancie combined payroll</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Avg Monthly True Spend</div>
+      <div class="stat-val" style="color:var(--red)">$9,486</div>
+      <div class="stat-sub">Consumption only (excl. debt pmts)</div>
+    </div>
+    <div class="stat-box" style="border-color:rgba(240,79,90,0.4);">
+      <div class="stat-label">Monthly Deficit</div>
+      <div class="stat-val" style="color:var(--red)">-$1,760</div>
+      <div class="stat-sub">Covered by Fidelity withdrawals</div>
+    </div>
+  </div>
+  <div class="grid-3" style="margin-bottom:24px;">
+    <div class="stat-box">
+      <div class="stat-label">Fixed Debt Obligations</div>
+      <div class="stat-val" style="color:var(--orange)">$5,648</div>
+      <div class="stat-sub">Mortgage + cars + revolving mins</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Subscriptions / Month</div>
+      <div class="stat-val" style="color:var(--orange)">$957</div>
+      <div class="stat-sub">Annualized: $11,484</div>
+    </div>
+    <div class="stat-box" style="border-color:rgba(201,168,76,0.4);">
+      <div class="stat-label">Cash Withdrawal (Invisible)</div>
+      <div class="stat-val" style="color:var(--gold)">$837</div>
+      <div class="stat-sub">Untracked — highest blind spot</div>
+    </div>
+  </div>
+
+  <!-- SPENDING SLIDERS -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">Find the Cash — Adjust Spending Habits</div>
+      <div style="font-size:10px;color:var(--text-muted)">Drag sliders to simulate cuts → see cash freed up below</div>
+    </div>
+    <div class="card-body">
+      <div class="slider-group">
+        <div class="slider-row">
+          <div class="slider-label">🍔 Dining / Coffee (currently $2,450/mo)</div>
+          <div class="slider-val" id="sv-dining">$2,450</div>
+        </div>
+        <input type="range" min="500" max="2450" value="2450" oninput="updateSlider('dining',this.value)">
+
+        <div class="slider-row">
+          <div class="slider-label">📺 Subscriptions (currently $957/mo)</div>
+          <div class="slider-val" id="sv-subs">$957</div>
+        </div>
+        <input type="range" min="200" max="957" value="957" oninput="updateSlider('subs',this.value)">
+
+        <div class="slider-row">
+          <div class="slider-label">🛍 Shopping / Personal (currently $1,813/mo)</div>
+          <div class="slider-val" id="sv-shop">$1,813</div>
+        </div>
+        <input type="range" min="400" max="1813" value="1813" oninput="updateSlider('shop',this.value)">
+
+        <div class="slider-row">
+          <div class="slider-label">💵 Cash Withdrawals (currently $837/mo)</div>
+          <div class="slider-val" id="sv-cash">$837</div>
+        </div>
+        <input type="range" min="0" max="837" value="837" oninput="updateSlider('cash',this.value)">
+
+        <div class="slider-row">
+          <div class="slider-label">🎮 "Monsters" + "PlayerFirst" (currently $782/mo)</div>
+          <div class="slider-val" id="sv-flag">$782</div>
+        </div>
+        <input type="range" min="0" max="782" value="782" oninput="updateSlider('flag',this.value)">
+      </div>
+
+      <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;">
+        <div>
+          <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:4px;">Monthly Cash Freed Up</div>
+          <div style="font-size:32px;font-weight:800;color:var(--green);font-variant-numeric:tabular-nums;" id="freed-total">$0</div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:4px;">Annualized</div>
+          <div style="font-size:20px;font-weight:800;color:var(--green);font-variant-numeric:tabular-nums;" id="freed-annual">$0</div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:4px;">Deficit Closed?</div>
+          <div style="font-size:14px;font-weight:700;" id="deficit-status">Not yet</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- REDIRECT OPPORTUNITIES -->
+  <div class="section-label">Credit Paydown Opportunities — Where Freed Cash Goes</div>
+  <div class="grid-2" style="margin-bottom:20px;" id="redirect-grid"></div>
+
+  <!-- MONTH BY MONTH PLAN -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">Month-by-Month Action Plan</div>
+      <div style="font-size:10px;color:var(--text-muted)" id="plan-subtitle">Adjust sliders above to activate plan</div>
+    </div>
+    <div class="card-body" id="month-plan"></div>
+  </div>
+
+  <!-- SUBSCRIPTION BREAKDOWN -->
+  <div class="card">
+    <div class="card-header"><div class="card-title">Subscription Audit — $957/Month · $11,484/Year</div></div>
+    <div class="card-body">
+      <div id="sub-list"></div>
+    </div>
+  </div>
+
+</div><!-- /page -->
+
+<script>
+// ── DATA ──────────────────────────────────────────────────────────────
+const BASELINE = { dining:2450, subs:957, shop:1813, cash:837, flag:782 };
+const current  = { dining:2450, subs:957, shop:1813, cash:837, flag:782 };
+
+const CREDIT_TARGETS = [
+  { id:'amazon', name:'Amazon Card (Nick)',   balance:598,  limit:600,  util:99.7, targetUtil:9,  paydown:542,  pts:52, priority:1 },
+  { id:'gs_nick',name:'GS Bank (Nick)',       balance:3357, limit:3450, util:97.3, targetUtil:9,  paydown:3047, pts:68, priority:2 },
+  { id:'gs_fan', name:'GS Bank (Fancie)',     balance:3710, limit:4000, util:92.75,targetUtil:9,  paydown:3350, pts:65, priority:3 },
+  { id:'citi',   name:'Citi Joint (Nick AU)', balance:3036, limit:4350, util:69.8, targetUtil:29, paydown:1773, pts:32, priority:4 },
+];
+
+const SUBSCRIPTIONS = [
+  { name:'Life Time Fitness (2 charges)', monthly:161, keep:false, note:'Both charges — consolidate to one membership' },
+  { name:'Apple Services', monthly:96, keep:true, note:'iCloud, Apple TV — keep' },
+  { name:'SportsRecruits', monthly:59, keep:null, note:'Youth sports recruiting — evaluate if active' },
+  { name:'Emagine Macomb', monthly:49, keep:false, note:'Movie membership — if using MJR, consolidate to one' },
+  { name:'Adobe Creative Cloud', monthly:45, keep:true, note:'Work-related — keep' },
+  { name:'Visme', monthly:35, keep:true, note:'Presentation tool — keep if using for LeVrage' },
+  { name:'ESPN+', monthly:21, keep:false, note:'Redundant if you have Hulu w/ ESPN' },
+  { name:'MJR Cinema', monthly:17, keep:false, note:'Two theater memberships — pick one' },
+  { name:'Ticketmaster', monthly:16, keep:null, note:'Event-based — can cancel and rebuy as needed' },
+  { name:'Netflix', monthly:15, keep:true, note:'Keep' },
+  { name:'BallerTV', monthly:13, keep:null, note:'Youth sports streaming — evaluate' },
+  { name:'NFHS Network', monthly:6, keep:false, note:'High school sports streaming — redundant' },
+  { name:'Hulu + Disney+', monthly:8, keep:true, note:'Bundle — keep' },
+];
+
+// ── SLIDER UPDATE ─────────────────────────────────────────────────────
+function updateSlider(key, val) {
+  current[key] = parseInt(val);
+  document.getElementById('sv-'+key).textContent = '$'+parseInt(val).toLocaleString();
+  recalc();
+}
+
+function recalc() {
+  const freed = Object.keys(BASELINE).reduce((sum,k) => sum + (BASELINE[k] - current[k]), 0);
+  document.getElementById('freed-total').textContent = '$'+freed.toLocaleString();
+  document.getElementById('freed-annual').textContent = '$'+(freed*12).toLocaleString();
+
+  const deficit = 1760;
+  const defEl = document.getElementById('deficit-status');
+  if (freed >= deficit) {
+    defEl.textContent = '✓ Closed';
+    defEl.style.color = 'var(--green)';
+  } else {
+    defEl.textContent = `$${(deficit-freed).toLocaleString()} gap`;
+    defEl.style.color = 'var(--orange)';
+  }
+
+  renderRedirects(freed);
+  renderMonthPlan(freed);
+}
+
+// ── REDIRECTS ─────────────────────────────────────────────────────────
+function renderRedirects(freed) {
+  let remaining = freed;
+  document.getElementById('redirect-grid').innerHTML = CREDIT_TARGETS.map((t,i) => {
+    const canFund = remaining >= t.paydown;
+    const partial = !canFund && remaining > 0;
+    const fundable = Math.min(remaining, t.paydown);
+    if (canFund) remaining -= t.paydown;
+
+    const partialUtil = partial ? Math.round(((t.balance - fundable) / t.limit) * 100) : null;
+
+    return `<div class="redirect-card ${canFund?'active':''}">
+      <div class="redirect-top">
+        <div>
+          <div class="redirect-name">#${t.priority} ${t.name}</div>
+          <div style="font-size:10px;color:var(--text-dim);margin-top:2px;">${t.util.toFixed(0)}% util → ${t.targetUtil}% target</div>
+        </div>
+        <div class="redirect-pts">${canFund?'+'+t.pts+' pts':'—'}</div>
+      </div>
+      <div class="redirect-body">
+        <div class="redirect-arrow">
+          <span class="pill pill-red">${t.util.toFixed(0)}%</span>
+          <span style="color:var(--text-muted)">→</span>
+          <span class="pill ${canFund?'pill-green':'pill-gold'}">${canFund?t.targetUtil+'%':partial?partialUtil+'%':t.targetUtil+'%'}</span>
+          <span style="margin-left:4px;color:${canFund?'var(--green)':partial?'var(--gold)':'var(--text-muted)'};">
+            ${canFund?`Pay $${t.paydown.toLocaleString()} ✓`:partial?`Partial: $${fundable.toLocaleString()} of $${t.paydown.toLocaleString()} needed`:`Need $${t.paydown.toLocaleString()} — free up more cash`}
+          </span>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── MONTH PLAN ─────────────────────────────────────────────────────────
+function renderMonthPlan(freed) {
+  if (freed < 100) {
+    document.getElementById('month-plan').innerHTML = '<div style="font-size:12px;color:var(--text-muted);padding:16px 0;">Adjust the sliders above to at least $100/month freed to generate a plan.</div>';
+    document.getElementById('plan-subtitle').textContent = 'Adjust sliders above to activate plan';
+    return;
+  }
+
+  const months = [];
+  let bank = 0;
+  let remaining = [...CREDIT_TARGETS];
+  let totalPts = 0;
+
+  for (let m = 1; m <= 6; m++) {
+    bank += freed;
+    const moves = [];
+    const next = remaining[0];
+
+    if (next && bank >= next.paydown) {
+      bank -= next.paydown;
+      moves.push({ account: next.name, paydown: next.paydown, pts: next.pts, toUtil: next.targetUtil });
+      totalPts += next.pts;
+      remaining = remaining.slice(1);
+      if (remaining[0] && bank >= remaining[0].paydown) {
+        const next2 = remaining[0];
+        bank -= next2.paydown;
+        moves.push({ account: next2.name, paydown: next2.paydown, pts: next2.pts, toUtil: next2.targetUtil });
+        totalPts += next2.pts;
+        remaining = remaining.slice(1);
+      }
+    } else if (next) {
+      const pct = Math.round((bank / next.paydown) * 100);
+      moves.push({ account: next.name, saving: true, saved: bank, needed: next.paydown, pct });
+    }
+
+    months.push({ month: m, moves, bankRemaining: bank, totalPts });
+  }
+
+  const monthNames = ['','Month 1','Month 2','Month 3','Month 4','Month 5','Month 6'];
+  document.getElementById('plan-subtitle').textContent = `$${freed.toLocaleString()}/mo freed · projected +${totalPts} pts over 6 months`;
+
+  document.getElementById('month-plan').innerHTML = months.map(m => {
+    const hasMoves = m.moves.some(x=>!x.saving);
+    return `<div class="month-row">
+      <div class="month-num">
+        <div class="month-circle ${hasMoves?'active':''}">${m.month}</div>
+        <div class="month-label">${monthNames[m.month]}</div>
+      </div>
+      <div class="month-content">
+        ${m.moves.map(mv => mv.saving
+          ? `<div class="month-title" style="color:var(--text-dim)">Banking $${mv.saved.toLocaleString()} toward ${mv.account}</div>
+             <div class="month-desc">${mv.pct}% of the $${mv.needed.toLocaleString()} needed · keep cutting</div>`
+          : `<div class="month-title">Pay $${mv.paydown.toLocaleString()} → ${mv.account}</div>
+             <div class="month-desc">Drops utilization to ${mv.toUtil}% target</div>
+             <div class="month-impact">+${mv.pts} projected pts</div>`
+        ).join('')}
+        ${m.bankRemaining > 0 && hasMoves ? `<div style="font-size:10px;color:var(--text-muted);margin-top:4px;">$${m.bankRemaining.toLocaleString()} remaining → rolls to next month</div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── SUBSCRIPTION LIST ──────────────────────────────────────────────────
+function renderSubs() {
+  const cutSavings = SUBSCRIPTIONS.filter(s=>s.keep===false).reduce((s,x)=>s+x.monthly,0);
+  document.getElementById('sub-list').innerHTML =
+    `<div style="display:flex;justify-content:space-between;align-items:center;padding:0 0 12px;border-bottom:1px solid var(--border);margin-bottom:10px;">
+      <div style="font-size:12px;color:var(--text-dim);">Suggested cuts save <strong style="color:var(--green)">$${cutSavings}/month</strong> ($${(cutSavings*12).toLocaleString()}/yr)</div>
+      <div style="font-size:10px;color:var(--text-muted);">🟢 Keep · 🔴 Cut · ⚪ Evaluate</div>
+    </div>` +
+    SUBSCRIPTIONS.map(s => `
+    <div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);">
+      <div style="font-size:14px;">${s.keep===true?'🟢':s.keep===false?'🔴':'⚪'}</div>
+      <div style="flex:1;">
+        <div style="font-size:12px;font-weight:600;">${s.name}</div>
+        <div style="font-size:10px;color:var(--text-dim);">${s.note}</div>
+      </div>
+      <div style="font-size:13px;font-weight:700;color:${s.keep===false?'var(--red)':s.keep===true?'var(--text-dim)':'var(--orange)'};">
+        $${s.monthly}/mo
+      </div>
+    </div>`).join('');
+}
+
+// ── INIT ──────────────────────────────────────────────────────────────
+recalc();
+renderSubs();
+
+// ── SUPABASE SESSION GUARD + CLIENT BANNER
+(async function() {
+  const { createClient } = supabase;
+  const sb = createClient(LEVRAGE_CONFIG.supabaseUrl, LEVRAGE_CONFIG.supabaseKey);
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { window.location.href = 'LeVrage_login.html'; return; }
+
+  const params = new URLSearchParams(window.location.search);
+  const clientId = params.get('clientId');
+  let d = null;
+
+  if (clientId) {
+    const { data } = await sb.from('clients').select('*').eq('id', clientId).single();
+    if (data) {
+      const report = data.report_history?.slice(-1)[0] || null;
+      d = { clientName: data.name, pullDate: report?.pullDate, accounts: report?.accounts };
+    }
+  } else {
+    try { d = JSON.parse(localStorage.getItem('levrage_import') || 'null'); } catch(e) {}
+  }
+
+  if (!d || !d.clientName || d.clientName === 'Unknown Client') return;
+  document.getElementById('cbName').textContent = d.clientName;
+  document.getElementById('cbMeta').textContent = `${d.accounts?.length || 0} accounts · Pulled ${d.pullDate || '—'}`;
+  document.getElementById('clientBanner').style.display = 'flex';
+  if (document.getElementById('cbHeaderName'))
+    document.getElementById('cbHeaderName').textContent = d.clientName + ' · 90-Day Analysis';
+})();
+</script>
+</body>
+</html>

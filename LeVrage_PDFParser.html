@@ -1,0 +1,1038 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LeVrage — Credit Report Parser</title>
+<script src="levrage_config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:      #0f0f0f;
+  --surface: #1a1a1a;
+  --card:    #222222;
+  --border:  #333333;
+  --gold:    #C8A96E;
+  --gold2:   #a8843e;
+  --gold-glow: rgba(200,169,110,0.15);
+  --text:    #f0f0f0;
+  --muted:   #888888;
+  --dim:     #555555;
+  --green:   #2ecc71;
+  --red:     #e74c3c;
+  --orange:  #f39c12;
+  --blue:    #3498db;
+  --purple:  #9b59b6;
+  --radius:  12px;
+  --radius-sm: 8px;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  padding: 0;
+}
+
+.shell {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 24px 20px 60px;
+}
+
+/* HEADER */
+.hdr {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  margin-bottom: 28px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+}
+.brand { font-size: 26px; font-weight: 800; color: var(--gold); letter-spacing: 0.04em; }
+.brand span { color: var(--text); font-weight: 300; }
+.tagline { font-size: 11px; color: var(--muted); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 3px; }
+.badge {
+  background: var(--gold-glow);
+  border: 1px solid var(--gold2);
+  color: var(--gold);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 12px;
+  border-radius: 20px;
+  letter-spacing: 0.08em;
+}
+
+/* UPLOAD ZONE */
+.upload-zone {
+  border: 2px dashed var(--border);
+  border-radius: var(--radius);
+  padding: 48px 24px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+  background: var(--surface);
+  margin-bottom: 24px;
+}
+.upload-zone:hover, .upload-zone.drag-over {
+  border-color: var(--gold);
+  background: var(--gold-glow);
+}
+.upload-icon { font-size: 42px; margin-bottom: 12px; }
+.upload-title { font-size: 18px; font-weight: 700; color: var(--text); margin-bottom: 6px; }
+.upload-sub { font-size: 13px; color: var(--muted); line-height: 1.6; }
+.upload-btn {
+  display: inline-block;
+  margin-top: 16px;
+  padding: 10px 24px;
+  background: linear-gradient(135deg, var(--gold2), var(--gold));
+  color: #111;
+  font-size: 14px;
+  font-weight: 700;
+  border-radius: 8px;
+  cursor: pointer;
+  border: none;
+}
+#fileInput { display: none; }
+
+/* STATUS */
+.status-bar {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 16px;
+  margin-bottom: 20px;
+  font-size: 13px;
+  color: var(--muted);
+  display: none;
+}
+.status-bar.active { display: flex; align-items: center; gap: 10px; }
+.status-bar.success { border-color: var(--green); color: var(--green); }
+.status-bar.error { border-color: var(--red); color: var(--red); }
+.spinner {
+  width: 16px; height: 16px;
+  border: 2px solid var(--border);
+  border-top-color: var(--gold);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* RESULTS GRID */
+.results { display: none; }
+.results.visible { display: block; }
+
+.result-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+@media (max-width: 600px) { .result-grid { grid-template-columns: 1fr; } }
+
+/* CARDS */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px;
+}
+.card-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--gold);
+  margin-bottom: 14px;
+}
+.card.full { grid-column: 1 / -1; }
+
+/* BORROWER SCORES */
+.borrower-block {
+  margin-bottom: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+.borrower-block:last-child { margin-bottom: 0; padding-bottom: 0; border-bottom: none; }
+.borrower-name { font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 8px; }
+.score-row { display: flex; gap: 10px; }
+.score-pill {
+  flex: 1;
+  background: #111;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  text-align: center;
+}
+.score-bureau { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.score-val { font-size: 20px; font-weight: 800; margin-top: 2px; }
+.score-model { font-size: 10px; color: var(--dim); margin-top: 1px; }
+
+/* TRADELINE TABLE */
+.tl-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.tl-table th {
+  text-align: left;
+  padding: 6px 8px;
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--border);
+}
+.tl-table td {
+  padding: 8px 8px;
+  border-bottom: 1px solid #2a2a2a;
+  color: var(--text);
+  vertical-align: top;
+}
+.tl-table tr:last-child td { border-bottom: none; }
+.tl-table tr:hover td { background: rgba(255,255,255,0.02); }
+.tl-name { font-weight: 600; }
+.chip {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 20px;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+.chip-red { background: rgba(231,76,60,0.15); color: var(--red); border: 1px solid rgba(231,76,60,0.3); }
+.chip-orange { background: rgba(243,156,18,0.15); color: var(--orange); border: 1px solid rgba(243,156,18,0.3); }
+.chip-green { background: rgba(46,204,113,0.15); color: var(--green); border: 1px solid rgba(46,204,113,0.3); }
+.chip-purple { background: rgba(155,89,182,0.15); color: var(--purple); border: 1px solid rgba(155,89,182,0.3); }
+.chip-blue { background: rgba(52,152,219,0.15); color: var(--blue); border: 1px solid rgba(52,152,219,0.3); }
+.util-cell { font-weight: 700; }
+.util-high { color: var(--red); }
+.util-mid  { color: var(--orange); }
+.util-low  { color: var(--green); }
+
+/* ECOA LEGEND */
+.ecoa-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.ecoa-tag {
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+
+/* SUMMARY STATS */
+.stat-row { display: flex; justify-content: space-between; align-items: center; padding: 7px 0; border-bottom: 1px solid #2a2a2a; font-size: 13px; }
+.stat-row:last-child { border-bottom: none; }
+.stat-label { color: var(--muted); }
+.stat-val { font-weight: 700; color: var(--text); }
+.stat-val.gold { color: var(--gold); }
+.stat-val.red { color: var(--red); }
+.stat-val.green { color: var(--green); }
+.stat-val.orange { color: var(--orange); }
+
+/* NEGATIVE ITEMS */
+.neg-item {
+  background: #111;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  margin-bottom: 8px;
+}
+.neg-item:last-child { margin-bottom: 0; }
+.neg-item-hdr { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+.neg-item-name { font-size: 13px; font-weight: 700; color: var(--text); }
+.neg-item-detail { font-size: 12px; color: var(--muted); line-height: 1.5; }
+
+/* EXPORT BUTTONS */
+.export-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+}
+.btn {
+  padding: 11px 20px;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+.btn:hover { opacity: 0.85; }
+.btn-gold { background: linear-gradient(135deg, var(--gold2), var(--gold)); color: #111; }
+.btn-outline { background: transparent; border: 1px solid var(--border); color: var(--muted); }
+.btn-outline:hover { border-color: var(--gold); color: var(--gold); }
+
+/* RAW TEXT */
+.raw-box {
+  background: #111;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 14px;
+  font-size: 11px;
+  color: var(--muted);
+  font-family: 'Courier New', monospace;
+  max-height: 300px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  display: none;
+}
+.raw-box.visible { display: block; }
+
+/* CLIENT BANNER */
+.client-banner {
+  display: none;
+  align-items: center;
+  justify-content: space-between;
+  background: linear-gradient(90deg, #1a1500, #1a1a1a);
+  border: 1px solid var(--gold2);
+  border-radius: 10px;
+  padding: 10px 16px;
+  margin-bottom: 20px;
+  gap: 12px;
+}
+.client-banner.visible { display: flex; }
+.cb-left { display: flex; align-items: center; gap: 10px; }
+.cb-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); flex-shrink: 0; }
+.cb-name { font-size: 14px; font-weight: 700; color: var(--text); }
+.cb-meta { font-size: 11px; color: var(--muted); margin-top: 1px; }
+.cb-clear { font-size: 11px; color: var(--dim); cursor: pointer; padding: 4px 8px; border: 1px solid var(--border); border-radius: 6px; background: transparent; }
+.cb-clear:hover { color: var(--red); border-color: var(--red); }
+
+/* SECTION HEADER */
+.sec-hdr {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+.sec-hdr-title { font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--gold); }
+.sec-hdr-toggle { font-size: 12px; color: var(--muted); cursor: pointer; }
+.sec-hdr-toggle:hover { color: var(--gold); }
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <!-- HEADER -->
+  <div class="hdr">
+    <div>
+      <div class="brand">LeV<span>rage</span></div>
+      <div class="tagline">Credit Report Auto-Parser</div>
+    </div>
+    <div class="badge">AI Engine v1.0</div>
+  </div>
+
+  <!-- CLIENT BANNER (shows when a client is loaded) -->
+  <div class="client-banner" id="clientBanner">
+    <div class="cb-left">
+      <div class="cb-dot"></div>
+      <div>
+        <div class="cb-name" id="cbName">—</div>
+        <div class="cb-meta" id="cbMeta">—</div>
+      </div>
+    </div>
+    <button class="cb-clear" onclick="clearClient()">✕ Clear</button>
+  </div>
+
+  <!-- CLIENT INFO -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px;">
+    <div>
+      <div style="font-size:11px;color:var(--muted);font-weight:600;margin-bottom:5px;letter-spacing:0.06em;text-transform:uppercase;">Client Full Name</div>
+      <input type="text" id="clientName" placeholder="e.g. Nick Gegovic"
+        style="width:100%;background:#111;border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:15px;font-weight:600;padding:10px 14px;outline:none;transition:border-color 0.2s;"
+        onfocus="this.style.borderColor='var(--gold)'" onblur="this.style.borderColor='var(--border)'">
+    </div>
+    <div>
+      <div style="font-size:11px;color:var(--muted);font-weight:600;margin-bottom:5px;letter-spacing:0.06em;text-transform:uppercase;">Phone (optional)</div>
+      <input type="text" id="clientPhone" placeholder="e.g. 555-000-0000"
+        style="width:100%;background:#111;border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:15px;padding:10px 14px;outline:none;transition:border-color 0.2s;"
+        onfocus="this.style.borderColor='var(--gold)'" onblur="this.style.borderColor='var(--border)'">
+    </div>
+  </div>
+
+  <!-- UPLOAD ZONE -->
+  <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()">
+    <div class="upload-icon">📄</div>
+    <div class="upload-title">Upload Credit Report PDF</div>
+    <div class="upload-sub">
+      Supports tri-merge reports from Rocket Mortgage Pro, FactualData, MeridianLink,<br>
+      and most standard mortgage credit report formats.<br>
+      <span style="color:var(--dim);font-size:11px;">Report stays on your device — never uploaded to any server.</span>
+    </div>
+    <button class="upload-btn">Choose PDF File</button>
+    <input type="file" id="fileInput" accept=".pdf" onchange="handleFile(this.files[0])">
+  </div>
+
+  <!-- STATUS -->
+  <div class="status-bar" id="statusBar">
+    <div class="spinner" id="spinner"></div>
+    <span id="statusMsg">Processing...</span>
+  </div>
+
+  <!-- RESULTS -->
+  <div class="results" id="results">
+
+    <!-- EXPORT ROW -->
+    <div class="export-row">
+      <button class="btn btn-gold" onclick="exportToEngine()">⚡ Send to Decision Engine</button>
+      <button class="btn btn-outline" onclick="exportJSON()">↓ Export JSON</button>
+      <button class="btn btn-outline" onclick="toggleRaw()">Show Raw Text</button>
+      <button class="btn btn-outline" onclick="resetParser()">↺ Parse New File</button>
+    </div>
+
+    <!-- RESULT GRID -->
+    <div class="result-grid">
+
+      <!-- BORROWER SCORES -->
+      <div class="card">
+        <div class="card-title">📊 Credit Scores</div>
+        <div id="scoresOut"></div>
+      </div>
+
+      <!-- SUMMARY STATS -->
+      <div class="card">
+        <div class="card-title">📋 File Summary</div>
+        <div id="summaryOut"></div>
+      </div>
+
+      <!-- REVOLVING ACCOUNTS -->
+      <div class="card full">
+        <div class="sec-hdr">
+          <div class="sec-hdr-title">💳 Revolving Accounts</div>
+          <div class="sec-hdr-toggle" onclick="toggleSection('revolvingSection')">Toggle ▾</div>
+        </div>
+        <div id="revolvingSection">
+          <div id="revolvingOut"></div>
+        </div>
+      </div>
+
+      <!-- NEGATIVE / COLLECTIONS -->
+      <div class="card full">
+        <div class="sec-hdr">
+          <div class="sec-hdr-title">🚨 Negative Items &amp; Collections</div>
+          <div class="sec-hdr-toggle" onclick="toggleSection('negSection')">Toggle ▾</div>
+        </div>
+        <div id="negSection">
+          <div id="negOut"></div>
+        </div>
+      </div>
+
+      <!-- INSTALLMENT / MORTGAGE -->
+      <div class="card full">
+        <div class="sec-hdr">
+          <div class="sec-hdr-title">🏠 Installment &amp; Mortgage Accounts</div>
+          <div class="sec-hdr-toggle" onclick="toggleSection('installSection')">Toggle ▾</div>
+        </div>
+        <div id="installSection">
+          <div id="installOut"></div>
+        </div>
+      </div>
+
+    </div><!-- .result-grid -->
+
+    <!-- RAW TEXT -->
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-title">🔍 Raw Extracted Text (Debug)</div>
+      <div class="raw-box" id="rawBox"></div>
+    </div>
+
+  </div><!-- .results -->
+
+</div><!-- .shell -->
+
+<script>
+/* ─────────────────────────────────────────
+   PDF.js setup
+───────────────────────────────────────── */
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+let parsedData = null;
+let rawText = '';
+
+/* ─────────────────────────────────────────
+   DRAG & DROP
+───────────────────────────────────────── */
+const zone = document.getElementById('uploadZone');
+zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+zone.addEventListener('drop', e => {
+  e.preventDefault();
+  zone.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file && file.type === 'application/pdf') handleFile(file);
+});
+
+/* ─────────────────────────────────────────
+   FILE HANDLER
+───────────────────────────────────────── */
+async function handleFile(file) {
+  if (!file) return;
+  setStatus('loading', `Reading "${file.name}"...`);
+
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    let fullText = '';
+
+    for (let p = 1; p <= pdf.numPages; p++) {
+      const page = await pdf.getPage(p);
+      const content = await page.getTextContent();
+      const pageText = content.items.map(i => i.str).join(' ');
+      fullText += pageText + '\n';
+    }
+
+    rawText = fullText;
+    document.getElementById('rawBox').textContent = fullText;
+
+    setStatus('loading', 'Parsing tradelines and scores...');
+    parsedData = parseReport(fullText);
+
+    renderResults(parsedData);
+    setStatus('success', `✓ Parsed ${pdf.numPages} pages — found ${parsedData.revolving.length} revolving, ${parsedData.negatives.length} negative items.`);
+    document.getElementById('results').classList.add('visible');
+
+  } catch (err) {
+    console.error(err);
+    setStatus('error', '✗ Could not parse PDF. Try a text-layer PDF (not a scanned image). Error: ' + err.message);
+  }
+}
+
+/* ─────────────────────────────────────────
+   STATUS
+───────────────────────────────────────── */
+function setStatus(type, msg) {
+  const bar = document.getElementById('statusBar');
+  const spinner = document.getElementById('spinner');
+  const msgEl = document.getElementById('statusMsg');
+  bar.className = 'status-bar active';
+  if (type === 'success') bar.classList.add('success');
+  if (type === 'error') bar.classList.add('error');
+  spinner.style.display = type === 'loading' ? 'block' : 'none';
+  msgEl.textContent = msg;
+}
+
+/* ─────────────────────────────────────────
+   PARSER — Extract scores, tradelines, negatives
+   Handles: FactualData, Rocket Mortgage Pro, MeridianLink, Xactus formats
+───────────────────────────────────────── */
+function parseReport(text) {
+  const data = {
+    borrowers: [],
+    revolving: [],
+    installment: [],
+    mortgage: [],
+    negatives: [],
+    pullDate: '',
+    reportId: '',
+  };
+
+  const lines = text.split(/\n/).map(l => l.trim()).filter(Boolean);
+
+  // ── PULL DATE
+  const dateMatch = text.match(/(?:Report Date|Pulled|Date Pulled|Ordered)[:\s]+(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/i);
+  if (dateMatch) data.pullDate = dateMatch[1];
+
+  // ── SCORES
+  // Pattern: "Borrower Name ... Equifax ### TransUnion ### Experian ###"
+  // Also handles: "FICO Score: ###", "Beacon Score: ###", "Score: ###"
+  data.borrowers = extractBorrowers(text, lines);
+
+  // ── TRADELINES
+  const tradelines = extractTradelines(text, lines);
+  tradelines.forEach(tl => {
+    if (tl.accountType === 'Revolving' || tl.accountType === 'Credit Card' || tl.accountType === 'Charge Account') {
+      data.revolving.push(tl);
+    } else if (tl.accountType === 'Mortgage' || tl.accountType === 'Real Estate') {
+      data.mortgage.push(tl);
+    } else if (tl.accountType === 'Installment' || tl.accountType === 'Auto' || tl.accountType === 'Student Loan') {
+      data.installment.push(tl);
+    } else if (tl.status === 'Collection' || tl.status === 'Charge Off' || tl.status === 'Derogatory') {
+      data.negatives.push(tl);
+    } else {
+      data.installment.push(tl);
+    }
+  });
+
+  // Also pull collections separately
+  const collections = extractCollections(text, lines);
+  collections.forEach(c => {
+    const exists = data.negatives.find(n => n.name === c.name && n.balance === c.balance);
+    if (!exists) data.negatives.push(c);
+  });
+
+  return data;
+}
+
+/* ─────────────────────────────────────────
+   EXTRACT BORROWERS & SCORES
+───────────────────────────────────────── */
+function extractBorrowers(text, lines) {
+  const borrowers = [];
+
+  // Pattern 1: Tri-merge format — "Primary Borrower" / "Co-Borrower" sections
+  // Pattern 2: Names near score blocks
+  // Pattern 3: EFX / TU / EX followed by scores
+
+  const scorePatterns = [
+    // "Equifax: 569  TransUnion: 508  Experian: 562"
+    /(?:Equifax|EFX|EQ)[:\s]+(\d{3})[\s\S]{0,80}(?:TransUnion|TU)[:\s]+(\d{3})[\s\S]{0,80}(?:Experian|EX)[:\s]+(\d{3})/gi,
+    // "569 EFX  508 TU  562 EX"
+    /(\d{3})\s+(?:EFX|EQ|Equifax)[\s\S]{0,40}(\d{3})\s+(?:TU|Trans)[\s\S]{0,40}(\d{3})\s+(?:EX|Exp)/gi,
+    // Table format: three 3-digit numbers near bureau names on same section
+    /(?:Beacon|FICO|Score)[:\s]+(\d{3})[\s\S]{0,200}(?:Beacon|FICO|Score)[:\s]+(\d{3})[\s\S]{0,200}(?:Beacon|FICO|Score)[:\s]+(\d{3})/gi,
+  ];
+
+  // Try to find names
+  const namePattern = /(?:Primary\s+)?Borrower[:\s]+([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})/gi;
+  const nameMatches = [...text.matchAll(namePattern)];
+
+  // Find score blocks
+  let scoreBlocks = [];
+  scorePatterns.forEach(pat => {
+    let m;
+    const re = new RegExp(pat.source, pat.flags);
+    while ((m = re.exec(text)) !== null) {
+      scoreBlocks.push({ eq: parseInt(m[1]), tu: parseInt(m[2]), ex: parseInt(m[3]) });
+    }
+  });
+
+  // If no structured pattern, look for standalone 3-digit score sequences near bureau names
+  if (scoreBlocks.length === 0) {
+    const bureauScores = { eq: null, tu: null, ex: null };
+    const eqM = text.match(/(?:Equifax|EFX|EQ|Beacon)[^\d]{0,30}(\d{3})/i);
+    const tuM = text.match(/(?:TransUnion|Trans Union|TU)[^\d]{0,30}(\d{3})/i);
+    const exM = text.match(/(?:Experian|EXP|EX)[^\d]{0,30}(\d{3})/i);
+    if (eqM) bureauScores.eq = parseInt(eqM[1]);
+    if (tuM) bureauScores.tu = parseInt(tuM[1]);
+    if (exM) bureauScores.ex = parseInt(exM[1]);
+    if (bureauScores.eq || bureauScores.tu || bureauScores.ex) {
+      scoreBlocks.push(bureauScores);
+    }
+  }
+
+  // Build borrower objects
+  if (scoreBlocks.length === 0) {
+    borrowers.push({ name: 'Borrower 1', eq: '—', tu: '—', ex: '—', middle: '—', model: 'Unknown' });
+  } else {
+    scoreBlocks.forEach((s, i) => {
+      const name = nameMatches[i] ? nameMatches[i][1] : (i === 0 ? 'Primary Borrower' : 'Co-Borrower');
+      const scores = [s.eq, s.tu, s.ex].filter(x => x > 0).sort((a,b) => a-b);
+      const middle = scores.length === 3 ? scores[1] : (scores[0] || '—');
+      // Detect model: mortgage reports use Beacon 5.0 / Classic 04 / FairIsaac
+      const model = text.match(/Beacon 5\.0|Beacon5|Classic 04|Classic04|FairIsaac|FICO 2/i)
+        ? 'Mortgage Models' : 'FICO 8 / Consumer';
+      borrowers.push({ name, eq: s.eq || '—', tu: s.tu || '—', ex: s.ex || '—', middle, model });
+    });
+  }
+
+  return borrowers;
+}
+
+/* ─────────────────────────────────────────
+   EXTRACT TRADELINES
+───────────────────────────────────────── */
+function extractTradelines(text, lines) {
+  const tradelines = [];
+
+  // Look for tradeline blocks — common patterns in credit reports:
+  // "Creditor Name ... Balance: $X ... Limit: $X ... Status: ..."
+  // Also: account number patterns like "...1234"
+
+  // Strategy: find blocks of text that contain balance + limit keywords
+  const blockPattern = /([A-Z][A-Z\s/&,.']+?)\s{2,}(?:Acct[:\s#]+)?([\*Xx\d]{4,}[\d]{4})?[\s\S]{0,600}?(?:Balance|Bal)[:\s\$]+([\d,]+)[\s\S]{0,200}?(?:Credit Limit|Limit|High Credit)[:\s\$]+([\d,]+)/gi;
+
+  let m;
+  while ((m = blockPattern.exec(text)) !== null) {
+    const name = m[1].trim().replace(/\s+/g, ' ');
+    const acct = m[2] || '';
+    const balance = parseInt((m[3]||'0').replace(/,/g,''));
+    const limit = parseInt((m[4]||'0').replace(/,/g,''));
+    if (name.length < 3 || name.length > 60) continue;
+    if (balance === 0 && limit === 0) continue;
+
+    // Try to get account type and status from nearby text
+    const snippet = text.substring(Math.max(0, m.index - 50), m.index + 800);
+    const typeMatch = snippet.match(/(?:Account Type|Type)[:\s]+(Revolving|Credit Card|Installment|Mortgage|Auto|Student|Charge|Collection)/i);
+    const statusMatch = snippet.match(/(?:Payment Status|Status|Condition)[:\s]+(Current|Open|Collection|Charge.?Off|30 Day|60 Day|90 Day|Late|Derogatory|Paid|Closed)/i);
+    const ecoaMatch = snippet.match(/(?:ECOA|Responsibility)[:\s]?([A-Z]\-\d|Individual|Joint|Authorized)/i);
+    const dateMatch = snippet.match(/(?:Opened|Open Date)[:\s]+(\d{1,2}[\/\-]\d{4}|\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/i);
+    const payMatch = snippet.match(/(?:Monthly Payment|Min Payment|Payment)[:\s\$]+([\d,]+)/i);
+
+    const accountType = typeMatch ? typeMatch[1] : guessType(name, snippet);
+    const status = statusMatch ? statusMatch[1] : 'Unknown';
+    const ecoa = ecoaMatch ? ecoaMatch[1] : '';
+    const opened = dateMatch ? dateMatch[1] : '';
+    const payment = payMatch ? parseInt(payMatch[1].replace(/,/g,'')) : 0;
+    const util = limit > 0 ? Math.round(balance / limit * 100) : 0;
+
+    // Avoid duplicates
+    const dup = tradelines.find(t => t.name === name && Math.abs(t.balance - balance) < 50);
+    if (!dup) {
+      tradelines.push({ name, acct: acct ? '...' + acct.slice(-4) : '', balance, limit, payment, util, accountType, status, ecoa, opened });
+    }
+  }
+
+  return tradelines;
+}
+
+/* ─────────────────────────────────────────
+   EXTRACT COLLECTIONS / NEGATIVES
+   (Separate pass for collection-specific patterns)
+───────────────────────────────────────── */
+function extractCollections(text, lines) {
+  const collections = [];
+
+  // Pattern: lines with "Collection" or "Charge Off" + creditor name + balance
+  const negPattern = /([A-Z][A-Za-z\s/&,.']+?)\s{1,}[\s\S]{0,300}?(?:Charge.?Off|Collection|Derogatory)[\s\S]{0,200}?(?:Balance|Amount)[:\s\$]+([\d,]+)/gi;
+  let m;
+  while ((m = negPattern.exec(text)) !== null) {
+    const name = m[1].trim().replace(/\s+/g, ' ');
+    const balance = parseInt((m[2]||'0').replace(/,/g,''));
+    if (name.length < 3 || name.length > 60) continue;
+
+    const snippet = text.substring(Math.max(0, m.index), m.index + 600);
+    const typeM = snippet.match(/Collection|Charge.?Off|Derogatory/i);
+    const status = typeM ? typeM[0] : 'Derogatory';
+    const ecoaM = snippet.match(/(?:ECOA)[:\s]?([A-Z]\-\d)/i);
+    const ecoa = ecoaM ? ecoaM[1] : '';
+    const bureausM = snippet.match(/(?:Equifax|Experian|TransUnion|EFX|EX|TU)/gi);
+    const bureaus = bureausM ? [...new Set(bureausM)] : [];
+
+    const dup = collections.find(c => c.name === name && Math.abs(c.balance - balance) < 50);
+    if (!dup && balance > 0) {
+      collections.push({ name, acct: '', balance, limit: 0, payment: 0, util: 0, accountType: 'Collection', status, ecoa, opened: '', bureaus });
+    }
+  }
+
+  return collections;
+}
+
+/* ─────────────────────────────────────────
+   GUESS ACCOUNT TYPE from name/context
+───────────────────────────────────────── */
+function guessType(name, snippet) {
+  const n = name.toLowerCase();
+  if (/visa|mastercard|amex|discover|card|citi|capital one|chase|bank of america|wells fargo/.test(n)) return 'Revolving';
+  if (/mortgage|home|refi|heloc/.test(n)) return 'Mortgage';
+  if (/auto|car|vehicle|gm|ford|toyota|honda/.test(n)) return 'Auto';
+  if (/student|sallie|navient|fedloan/.test(n)) return 'Student Loan';
+  if (/collection|portfolio|midland|avant/.test(n)) return 'Collection';
+  if (snippet.match(/collection/i)) return 'Collection';
+  if (snippet.match(/revolving/i)) return 'Revolving';
+  return 'Installment';
+}
+
+/* ─────────────────────────────────────────
+   RENDER RESULTS
+───────────────────────────────────────── */
+function renderResults(d) {
+
+  // ── SCORES
+  let scoresHTML = '';
+  if (d.borrowers.length === 0) {
+    scoresHTML = '<div style="color:var(--muted);font-size:13px;">No score data detected. Try a text-layer PDF.</div>';
+  } else {
+    d.borrowers.forEach(b => {
+      const middle = typeof b.middle === 'number' ? b.middle : null;
+      const midColor = middle ? (middle >= 660 ? 'var(--green)' : middle >= 620 ? 'var(--gold)' : middle >= 580 ? 'var(--orange)' : 'var(--red)') : 'var(--muted)';
+      const scoreColor = s => {
+        if (typeof s !== 'number') return 'var(--muted)';
+        return s >= 660 ? 'var(--green)' : s >= 620 ? 'var(--gold)' : s >= 580 ? 'var(--orange)' : 'var(--red)';
+      };
+      scoresHTML += `
+      <div class="borrower-block">
+        <div class="borrower-name">${b.name} ${middle ? `<span style="font-size:12px;color:${midColor};font-weight:700;">· Middle: ${middle}</span>` : ''}</div>
+        <div class="score-row">
+          <div class="score-pill">
+            <div class="score-bureau">Equifax</div>
+            <div class="score-val" style="color:${scoreColor(b.eq)}">${b.eq}</div>
+            <div class="score-model">EFX</div>
+          </div>
+          <div class="score-pill">
+            <div class="score-bureau">TransUnion</div>
+            <div class="score-val" style="color:${scoreColor(b.tu)}">${b.tu}</div>
+            <div class="score-model">TU</div>
+          </div>
+          <div class="score-pill">
+            <div class="score-bureau">Experian</div>
+            <div class="score-val" style="color:${scoreColor(b.ex)}">${b.ex}</div>
+            <div class="score-model">EX</div>
+          </div>
+        </div>
+        <div style="margin-top:8px;font-size:11px;color:var(--dim);">Model: ${b.model}</div>
+      </div>`;
+    });
+  }
+  document.getElementById('scoresOut').innerHTML = scoresHTML;
+
+  // ── SUMMARY
+  const totalRevolving = d.revolving.length;
+  const totalBalRev = d.revolving.reduce((s,a) => s+a.balance, 0);
+  const totalLimRev = d.revolving.reduce((s,a) => s+a.limit, 0);
+  const totalUtil = totalLimRev > 0 ? Math.round(totalBalRev / totalLimRev * 100) : 0;
+  const utilColor = totalUtil >= 50 ? 'red' : totalUtil >= 30 ? 'orange' : 'green';
+
+  document.getElementById('summaryOut').innerHTML = `
+    <div class="stat-row"><span class="stat-label">Pull Date</span><span class="stat-val gold">${d.pullDate || '—'}</span></div>
+    <div class="stat-row"><span class="stat-label">Revolving Accounts</span><span class="stat-val">${totalRevolving}</span></div>
+    <div class="stat-row"><span class="stat-label">Total Rev. Balance</span><span class="stat-val">$${totalBalRev.toLocaleString()}</span></div>
+    <div class="stat-row"><span class="stat-label">Total Rev. Limit</span><span class="stat-val">$${totalLimRev.toLocaleString()}</span></div>
+    <div class="stat-row"><span class="stat-label">Overall Utilization</span><span class="stat-val ${utilColor}">${totalUtil}%</span></div>
+    <div class="stat-row"><span class="stat-label">Negative Items</span><span class="stat-val ${d.negatives.length > 0 ? 'red' : 'green'}">${d.negatives.length}</span></div>
+    <div class="stat-row"><span class="stat-label">Installment / Mortgage</span><span class="stat-val">${d.installment.length + d.mortgage.length}</span></div>
+  `;
+
+  // ── REVOLVING TABLE
+  if (d.revolving.length === 0) {
+    document.getElementById('revolvingOut').innerHTML = `<div style="color:var(--muted);font-size:13px;padding:10px 0;">No revolving accounts detected. Check raw text below.</div>`;
+  } else {
+    let tbl = `<table class="tl-table">
+    <thead><tr>
+      <th>Account</th><th>ECOA</th><th>Balance</th><th>Limit</th><th>Payment</th><th>Util%</th><th>Status</th>
+    </tr></thead><tbody>`;
+    d.revolving.forEach(a => {
+      const utilClass = a.util >= 50 ? 'util-high' : a.util >= 30 ? 'util-mid' : 'util-low';
+      const ecoaChip = a.ecoa ? `<span class="chip chip-blue">${a.ecoa}</span>` : '';
+      const statusChip = a.status === 'Current' || a.status === 'Open'
+        ? `<span class="chip chip-green">${a.status}</span>`
+        : `<span class="chip chip-red">${a.status}</span>`;
+      tbl += `<tr>
+        <td><span class="tl-name">${a.name}</span><br><span style="font-size:10px;color:var(--dim)">${a.acct}</span></td>
+        <td>${ecoaChip}</td>
+        <td>$${a.balance.toLocaleString()}</td>
+        <td>${a.limit ? '$'+a.limit.toLocaleString() : '—'}</td>
+        <td>${a.payment ? '$'+a.payment.toLocaleString() : '—'}</td>
+        <td class="util-cell ${utilClass}">${a.limit ? a.util+'%' : '—'}</td>
+        <td>${statusChip}</td>
+      </tr>`;
+    });
+    tbl += '</tbody></table>';
+    document.getElementById('revolvingOut').innerHTML = tbl;
+  }
+
+  // ── NEGATIVES
+  if (d.negatives.length === 0) {
+    document.getElementById('negOut').innerHTML = `<div style="color:var(--green);font-size:13px;padding:10px 0;">✓ No negative items detected.</div>`;
+  } else {
+    let negHTML = '';
+    d.negatives.forEach(a => {
+      const statusChip = a.status === 'Collection'
+        ? `<span class="chip chip-red">Collection</span>`
+        : a.status === 'Charge Off' || a.status === 'Charge-Off'
+        ? `<span class="chip chip-red">Charge-Off</span>`
+        : `<span class="chip chip-orange">${a.status}</span>`;
+      const ecoaChip = a.ecoa ? `<span class="chip chip-blue">${a.ecoa}</span>` : '';
+      const bureausStr = a.bureaus && a.bureaus.length > 0 ? `Reporting on: ${a.bureaus.join(', ')}` : '';
+      negHTML += `
+      <div class="neg-item">
+        <div class="neg-item-hdr">
+          <div class="neg-item-name">${a.name} ${statusChip} ${ecoaChip}</div>
+          <div style="font-weight:700;color:var(--red)">$${a.balance.toLocaleString()}</div>
+        </div>
+        <div class="neg-item-detail">${a.acct ? a.acct + ' · ' : ''}${bureausStr}</div>
+      </div>`;
+    });
+    document.getElementById('negOut').innerHTML = negHTML;
+  }
+
+  // ── INSTALLMENT / MORTGAGE
+  const combined = [...d.mortgage, ...d.installment];
+  if (combined.length === 0) {
+    document.getElementById('installOut').innerHTML = `<div style="color:var(--muted);font-size:13px;padding:10px 0;">No installment or mortgage accounts detected.</div>`;
+  } else {
+    let tbl = `<table class="tl-table">
+    <thead><tr><th>Account</th><th>Type</th><th>Balance</th><th>Payment</th><th>Status</th></tr></thead><tbody>`;
+    combined.forEach(a => {
+      const statusChip = a.status === 'Current' || a.status === 'Open'
+        ? `<span class="chip chip-green">${a.status}</span>`
+        : `<span class="chip chip-orange">${a.status}</span>`;
+      tbl += `<tr>
+        <td><span class="tl-name">${a.name}</span><br><span style="font-size:10px;color:var(--dim)">${a.acct}</span></td>
+        <td><span style="font-size:11px;color:var(--muted)">${a.accountType}</span></td>
+        <td>$${a.balance.toLocaleString()}</td>
+        <td>${a.payment ? '$'+a.payment.toLocaleString() : '—'}</td>
+        <td>${statusChip}</td>
+      </tr>`;
+    });
+    tbl += '</tbody></table>';
+    document.getElementById('installOut').innerHTML = tbl;
+  }
+}
+
+/* ─────────────────────────────────────────
+   EXPORT TO ENGINE (opens LeVrage_app.html with data in localStorage)
+───────────────────────────────────────── */
+// ── ECOA helpers (used by export and simulator)
+function ecoaToWho(ecoa, borrowers) {
+  const b0 = borrowers?.[0]?.name?.split(' ')[0] || 'Primary';
+  const b1 = borrowers?.[1]?.name?.split(' ')[0] || 'Co-Borrower';
+  if (!ecoa) return b0;
+  if (ecoa.startsWith('C')) return b1;   // C-1, C-2 = co-borrower
+  if (ecoa === 'J-2') return b0 + '/' + b1;
+  return b0;                              // B-1, B-3 = primary borrower
+}
+function ecoaToOwnership(ecoa) {
+  if (ecoa === 'B-3' || ecoa === 'C-3') return 'auth_user';
+  if (ecoa === 'J-2') return 'joint';
+  return 'primary';
+}
+
+function exportToEngine() {
+  if (!parsedData) return;
+
+  const clientName  = document.getElementById('clientName').value.trim() || 'Unknown Client';
+  const clientPhone = document.getElementById('clientPhone').value.trim() || '';
+  const borr = parsedData.borrowers || [];
+
+  // Build engine-compatible account array — includes ECOA for Simulator
+  const engineAccounts = parsedData.revolving.map((a, i) => ({
+    id:        i + 1,
+    name:      a.name,
+    acct:      a.acct || '',
+    balance:   a.balance,
+    limit:     a.limit,
+    payment:   a.payment,
+    ecoa:      a.ecoa || '',
+    who:       ecoaToWho(a.ecoa, borr),
+    ownership: ecoaToOwnership(a.ecoa),
+  })).filter(a => a.limit > 0);
+
+  // Build negatives array for Simulator — include all available fields
+  const negatives = parsedData.negatives.map((a, i) => ({
+    id:        'neg_' + i,
+    name:      a.name,
+    acct:      a.acct || '',
+    who:       ecoaToWho(a.ecoa, borr),
+    balance:   a.balance || 0,
+    type:      /charge.?off|chargeoff/i.test(a.status || a.accountType) ? 'chargeoff' : 'collection',
+    months_ago: 18,   // default — collection date not available in PDF text layer
+    ecoa:      a.ecoa || '',
+  }));
+
+  const exportObj = {
+    clientName,
+    clientPhone,
+    clientId:      Date.now().toString(36),
+    accounts:      engineAccounts,
+    negatives,
+    borrowers:     borr,
+    pullDate:      parsedData.pullDate,
+    reportId:      parsedData.reportId || '',
+    negativeCount: negatives.length,
+    exportedAt:    new Date().toISOString(),
+  };
+
+  // Store in localStorage for all tools to pick up
+  try {
+    localStorage.setItem('levrage_import', JSON.stringify(exportObj));
+  } catch(e) {}
+
+  // Also save to Supabase if a known client is active
+  const storedId = exportObj.clientId;
+  if (window._sb && storedId && storedId.length > 10) {
+    try {
+      const { data: existing } = await window._sb.from('clients').select('id, report_history').eq('id', storedId).single();
+      if (existing) {
+        const history = existing.report_history || [];
+        const alreadySaved = history.some(r => r.pullDate === exportObj.pullDate && r.reportId === exportObj.reportId);
+        if (!alreadySaved) {
+          const newEntry = {
+            pullDate:      exportObj.pullDate,
+            reportId:      exportObj.reportId,
+            accounts:      engineAccounts,
+            negatives,
+            borrowers:     borr,
+            negativeCount: negatives.length,
+            savedAt:       new Date().toISOString(),
+          };
+          await window._sb.from('clients').update({ report_history: [...history, newEntry], latest_pull_date: exportObj.pullDate || null, last_active: new Date().toISOString() }).eq('id', storedId);
+        }
+      }
+    } catch(e) { console.error('Supabase save error:', e); }
+  }
+
+  alert(`✓ Loaded: ${clientName}\n${engineAccounts.length} revolving accounts · ${negatives.length} negative items\nPulled: ${parsedData.pullDate || 'Unknown date'}\n\nOpen any LeVrage tool — the client banner will appear automatically.`);
+}
+
+/* ─────────────────────────────────────────
+   EXPORT JSON
+───────────────────────────────────────── */
+function exportJSON() {
+  if (!parsedData) return;
+  const blob = new Blob([JSON.stringify(parsedData, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'levrage_credit_parse.json';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+/* ─────────────────────────────────────────
+   UI HELPERS
+───────────────────────────────────────── */
+function toggleRaw() {
+  const box = document.getElementById('rawBox');
+  box.classList.toggle('visible');
+}
+function toggleSection(id) {
+  const el = document.getElementById(id);
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+function resetParser() {
+  parsedData = null;
+  rawText = '';
+  document.getElementById('results').classList.remove('visible');
+  document.getElementById('statusBar').className = 'status-bar';
+  document.getElementById('fileInput').value = '';
+}
+
+/* ─────────────────────────────────────────
+   CLIENT BANNER — load from localStorage on page open
+───────────────────────────────────────── */
+function loadClientBanner() {
+  try {
+    const stored = JSON.parse(localStorage.getItem('levrage_import') || 'null');
+    if (!stored || !stored.clientName || stored.clientName === 'Unknown Client') return;
+    document.getElementById('cbName').textContent = stored.clientName;
+    document.getElementById('cbMeta').textContent =
+      `${stored.accounts?.length || 0} accounts · ${stored.negativeCount || 0} negatives · Pulled ${stored.pullDate || '—'}`;
+    document.getElementById('clientBanner').classList.add('visible');
+    // Pre-fill name field
+    document.getElementById('clientName').value = stored.clientName;
+    if (stored.clientPhone) document.getElementById('clientPhone').value = stored.clientPhone;
+  } catch(e) {}
+}
+
+function clearClient() {
+  localStorage.removeItem('levrage_import');
+  document.getElementById('clientBanner').classList.remove('visible');
+  document.getElementById('clientName').value = '';
+  document.getElementById('clientPhone').value = '';
+}
+
+// ── SUPABASE SESSION GUARD
+(async function() {
+  const { createClient } = supabase;
+  const sb = createClient(LEVRAGE_CONFIG.supabaseUrl, LEVRAGE_CONFIG.supabaseKey);
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { window.location.href = 'LeVrage_login.html'; return; }
+  window._sb = sb; // make available to exportToEngine
+})();
+
+loadClientBanner();
+</script>
+</body>
+</html>

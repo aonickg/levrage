@@ -1,0 +1,1622 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LeVrage — Move the Pivot</title>
+<script src="levrage_config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:      #0f0f0f;
+  --surface: #1a1a1a;
+  --card:    #222222;
+  --border:  #333333;
+  --gold:    #C8A96E;
+  --gold2:   #a8843e;
+  --gold-glow: rgba(200,169,110,0.15);
+  --text:    #f0f0f0;
+  --muted:   #888888;
+  --dim:     #555555;
+  --green:   #2ecc71;
+  --red:     #e74c3c;
+  --orange:  #f39c12;
+  --blue:    #3498db;
+  --radius:  12px;
+  --radius-sm: 8px;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+
+.shell {
+  width: 100%;
+  max-width: 520px;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+}
+
+/* ── HEADER ── */
+.hdr {
+  background: #111;
+  border-bottom: 1px solid var(--border);
+  padding: 0 20px;
+}
+.hdr-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 0 10px;
+}
+.brand {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: var(--gold);
+}
+.brand span { color: var(--text); font-weight: 300; }
+.tagline {
+  font-size: 10px;
+  color: var(--muted);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin-top: 1px;
+}
+
+/* ── STEP DOTS ── */
+.steps {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding: 0 0 12px;
+}
+.step-wrap {
+  display: flex;
+  align-items: center;
+  flex: 1;
+}
+.step-dot {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  border: 2px solid var(--border);
+  color: var(--muted);
+  background: var(--surface);
+  transition: all 0.3s;
+  flex-shrink: 0;
+}
+.step-dot.active {
+  border-color: var(--gold);
+  color: var(--gold);
+  background: var(--gold-glow);
+}
+.step-dot.done {
+  border-color: var(--green);
+  color: var(--green);
+  background: rgba(46,204,113,0.1);
+}
+.step-label {
+  font-size: 10px;
+  color: var(--muted);
+  margin-left: 6px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.step-label.active { color: var(--gold); }
+.step-label.done { color: var(--green); }
+.step-line {
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+  margin: 0 8px;
+}
+.step-line.done { background: var(--green); }
+
+/* ── PROGRESS BAR ── */
+.prog-bar-wrap {
+  height: 3px;
+  background: var(--border);
+}
+.prog-bar {
+  height: 100%;
+  background: linear-gradient(90deg, var(--gold2), var(--gold));
+  transition: width 0.4s ease;
+}
+
+/* ── SCREEN ── */
+.screen { display: none; flex-direction: column; flex: 1; }
+.screen.active { display: flex; }
+.screen-body { padding: 20px; display: flex; flex-direction: column; gap: 16px; flex: 1; }
+
+/* ── SECTION LABELS ── */
+.sec-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--gold);
+  margin-bottom: 2px;
+}
+.sec-title {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--text);
+  line-height: 1.2;
+}
+.sec-sub {
+  font-size: 13px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+/* ── CARDS ── */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+.card-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--gold);
+  margin-bottom: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* ── INPUTS ── */
+.field-group { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+.field-group:last-child { margin-bottom: 0; }
+.field-label { font-size: 12px; color: var(--muted); font-weight: 500; }
+.field-row { display: flex; gap: 10px; }
+.field-row .field-group { flex: 1; margin-bottom: 0; }
+
+input[type="number"], input[type="text"] {
+  background: #111;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 600;
+  padding: 10px 12px;
+  width: 100%;
+  outline: none;
+  transition: border-color 0.2s;
+}
+input[type="number"]:focus, input[type="text"]:focus {
+  border-color: var(--gold);
+}
+input[type="number"]::placeholder, input[type="text"]::placeholder {
+  color: var(--dim);
+  font-weight: 400;
+}
+
+/* ── FLAG TOGGLES ── */
+.flags-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.flag-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: #111;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+}
+.flag-item.active {
+  border-color: var(--red);
+  background: rgba(231,76,60,0.08);
+}
+.flag-item:hover { border-color: var(--dim); }
+.flag-left { display: flex; align-items: center; gap: 10px; }
+.flag-icon { font-size: 16px; }
+.flag-text { font-size: 13px; color: var(--text); font-weight: 500; }
+.flag-sub { font-size: 11px; color: var(--muted); margin-top: 1px; }
+.flag-toggle {
+  width: 38px;
+  height: 22px;
+  border-radius: 11px;
+  background: var(--border);
+  position: relative;
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+.flag-toggle::after {
+  content: '';
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--muted);
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  transition: left 0.2s, background 0.2s;
+}
+.flag-item.active .flag-toggle { background: rgba(231,76,60,0.3); }
+.flag-item.active .flag-toggle::after { left: 19px; background: var(--red); }
+
+/* ── ACCOUNT CARDS (ENGINE) ── */
+.acct-list { display: flex; flex-direction: column; gap: 12px; }
+.acct-card {
+  background: #111;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+}
+.acct-card-hdr {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.acct-card-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+.acct-util-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 20px;
+}
+.util-high { background: rgba(231,76,60,0.2); color: var(--red); }
+.util-mid  { background: rgba(243,156,18,0.2); color: var(--orange); }
+.util-low  { background: rgba(46,204,113,0.2); color: var(--green); }
+.acct-inputs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+.acct-input-wrap { display: flex; flex-direction: column; gap: 3px; }
+.acct-input-label { font-size: 10px; color: var(--muted); letter-spacing: 0.06em; text-transform: uppercase; }
+.acct-input-wrap input {
+  font-size: 13px;
+  padding: 7px 10px;
+}
+.util-bar-wrap {
+  height: 6px;
+  background: var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.util-bar {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s;
+}
+.util-high-bar { background: linear-gradient(90deg, #c0392b, #e74c3c); }
+.util-mid-bar  { background: linear-gradient(90deg, #d68910, #f39c12); }
+.util-low-bar  { background: linear-gradient(90deg, #27ae60, #2ecc71); }
+.add-acct-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  padding: 10px;
+  background: transparent;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color 0.2s, color 0.2s;
+  margin-top: 4px;
+}
+.add-acct-btn:hover { border-color: var(--gold); color: var(--gold); }
+
+/* ── BUTTONS ── */
+.btn {
+  width: 100%;
+  padding: 14px;
+  border: none;
+  border-radius: var(--radius);
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  letter-spacing: 0.04em;
+  transition: opacity 0.2s, transform 0.1s;
+}
+.btn:active { transform: scale(0.98); }
+.btn-gold {
+  background: linear-gradient(135deg, var(--gold2), var(--gold));
+  color: #111;
+}
+.btn-gold:hover { opacity: 0.92; }
+.btn-outline {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+.btn-outline:hover { border-color: var(--gold); color: var(--gold); }
+.btn-row { display: flex; gap: 10px; }
+.btn-row .btn { flex: 1; }
+
+/* ── NEXT BEST ACTION HERO (Screen 3) ── */
+.nba-hero {
+  background: linear-gradient(135deg, #1a1500, #1a1a1a);
+  border: 1px solid var(--gold2);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.nba-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px 8px;
+  border-bottom: 1px solid rgba(168,132,62,0.3);
+}
+.nba-header-label {
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--gold);
+}
+.nba-partial-badge {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--orange);
+  padding: 2px 8px;
+  border: 1px solid rgba(243,156,18,0.4);
+  border-radius: 20px;
+  background: rgba(243,156,18,0.08);
+  letter-spacing: 0.06em;
+}
+.nba-parts { display: flex; flex-direction: column; }
+.nba-part {
+  padding: 11px 16px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.nba-part:last-child { border-bottom: none; }
+.nba-part-tag {
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--dim);
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.nba-part-body { font-size: 14px; color: var(--text); line-height: 1.4; }
+.nba-action-text {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text);
+  line-height: 1.25;
+}
+.nba-action-amount { color: var(--gold); }
+.nba-pts-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  background: var(--gold-glow);
+  border: 1px solid var(--gold2);
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--gold);
+  margin-right: 6px;
+}
+.nba-model-label { font-size: 12px; color: var(--muted); }
+.nba-conf-score { font-weight: 700; color: var(--gold); }
+.nba-conf-reason { color: var(--muted); }
+
+/* ── CONFIDENCE BAR ── */
+.conf-wrap {
+  padding: 16px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.conf-hdr {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.conf-label { font-size: 12px; color: var(--muted); font-weight: 500; }
+.conf-pct {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--gold);
+}
+.conf-bar-wrap {
+  height: 8px;
+  background: var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+.conf-bar {
+  height: 100%;
+  background: linear-gradient(90deg, var(--gold2), var(--gold));
+  border-radius: 4px;
+  transition: width 0.5s ease;
+}
+.conf-flags-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.conf-flag {
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 20px;
+  background: rgba(231,76,60,0.12);
+  color: #e88;
+  border: 1px solid rgba(231,76,60,0.25);
+}
+
+/* ── OUTPUT ACCOUNT STACK ── */
+.output-acct {
+  background: #111;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.output-acct.top-pick {
+  border-color: var(--gold2);
+  background: linear-gradient(90deg, #1a1500, #111);
+}
+.output-acct-left { flex: 1; min-width: 0; }
+.output-acct-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.output-acct-detail {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+.output-acct-util {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.output-acct-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 20px;
+}
+.output-acct-pts {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--green);
+}
+.util-bar-mini {
+  width: 70px;
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.util-bar-mini-fill {
+  height: 100%;
+  border-radius: 2px;
+}
+
+/* ── INCOME INSIGHT ── */
+.income-insight {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+}
+.ii-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.ii-row:last-child { border-bottom: none; }
+.ii-row-label { color: var(--muted); }
+.ii-row-val { font-weight: 700; color: var(--text); }
+.ii-row-val.gold { color: var(--gold); }
+.ii-row-val.green { color: var(--green); }
+.ii-row-val.red { color: var(--red); }
+
+/* ── PARTIAL NOTE ── */
+.partial-note {
+  background: rgba(243,156,18,0.08);
+  border: 1px solid rgba(243,156,18,0.3);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  font-size: 13px;
+  color: var(--orange);
+  line-height: 1.5;
+}
+
+/* ── RESET / FOOTER ── */
+.screen-footer {
+  padding: 16px 20px;
+  border-top: 1px solid var(--border);
+  background: #111;
+}
+
+/* ── UTIL THRESHOLDS HELPER ── */
+.threshold-pills {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+.t-pill {
+  font-size: 11px;
+  padding: 3px 9px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+.t-pill.active { border-color: var(--gold); color: var(--gold); background: var(--gold-glow); }
+
+/* ── LOAN GOAL SELECTOR ── */
+.goal-pill-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+.goal-pill {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+  user-select: none;
+}
+.goal-pill:hover { border-color: var(--gold2); color: var(--text); }
+.goal-pill.active { border-color: var(--gold); color: var(--gold); background: var(--gold-glow); }
+
+/* ── GOAL CONTEXT BAR ── */
+.goal-bar {
+  background: linear-gradient(90deg, #1a1500, #111);
+  border: 1px solid #a8843e55;
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  margin-bottom: 0;
+}
+.goal-bar-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.goal-bar-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--gold);
+  letter-spacing: 0.04em;
+}
+.goal-bar-model {
+  font-size: 10px;
+  color: var(--muted);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.goal-tier-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.goal-tier {
+  font-size: 11px;
+  padding: 3px 9px;
+  border-radius: 5px;
+  background: #1e1e1e;
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+.goal-tier.min  { border-color: var(--red);    color: var(--red);    background: #1e0e0e; }
+.goal-tier.good { border-color: var(--orange);  color: var(--orange); background: #1e1200; }
+.goal-tier.best { border-color: var(--green);   color: var(--green);  background: #0e1e0e; }
+.goal-gap-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+}
+.goal-gap-label { color: var(--muted); flex: 1; }
+.goal-gap-val   { font-weight: 700; font-variant-numeric: tabular-nums; }
+.goal-gap-val.gap-needed { color: var(--red);   }
+.goal-gap-val.gap-met    { color: var(--green); }
+
+/* ── NO ACCOUNTS MSG ── */
+.empty-state {
+  text-align: center;
+  padding: 30px 20px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.empty-state .big { font-size: 32px; margin-bottom: 8px; }
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <!-- CLIENT BANNER -->
+  <div id="clientBanner" style="display:none;align-items:center;justify-content:space-between;background:linear-gradient(90deg,#1a1500,#1a1a1a);border-bottom:1px solid #a8843e;padding:8px 16px;gap:12px;">
+    <div style="display:flex;align-items:center;gap:8px;">
+      <div style="width:7px;height:7px;border-radius:50%;background:#2ecc71;flex-shrink:0;"></div>
+      <div>
+        <span id="cbName" style="font-size:13px;font-weight:700;color:#f0f0f0;"></span>
+        <span id="cbMeta" style="font-size:11px;color:#888;margin-left:8px;"></span>
+      </div>
+    </div>
+    <span style="font-size:10px;color:#555;letter-spacing:0.1em;text-transform:uppercase;">Decision Engine</span>
+  </div>
+
+  <!-- HEADER -->
+  <div class="hdr">
+    <div class="hdr-top">
+      <div>
+        <div class="brand">LeV<span>rage</span></div>
+        <div class="tagline">Move the Pivot</div>
+      </div>
+      <div style="text-align:right;">
+        <div style="font-size:11px;color:var(--muted);">Decision Engine</div>
+        <div style="font-size:10px;color:var(--dim);">v2.0</div>
+      </div>
+    </div>
+
+    <!-- STEP DOTS -->
+    <div class="steps">
+      <div class="step-wrap">
+        <div class="step-dot active" id="dot1">1</div>
+        <div class="step-label active" id="lbl1">Discover</div>
+      </div>
+      <div class="step-line" id="line1"></div>
+      <div class="step-wrap">
+        <div class="step-dot" id="dot2">2</div>
+        <div class="step-label" id="lbl2">Engine</div>
+      </div>
+      <div class="step-line" id="line2"></div>
+      <div class="step-wrap">
+        <div class="step-dot" id="dot3">3</div>
+        <div class="step-label" id="lbl3">Next Best Action</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PROGRESS BAR -->
+  <div class="prog-bar-wrap">
+    <div class="prog-bar" id="progBar" style="width:0%"></div>
+  </div>
+
+  <!-- ══════════════════════════════════
+       SCREEN 1 — DISCOVER
+  ══════════════════════════════════ -->
+  <div class="screen active" id="screen1">
+    <div class="screen-body">
+      <div>
+        <div class="sec-label">Step 1</div>
+        <div class="sec-title">Client Discovery</div>
+        <div class="sec-sub">Capture income, available cash, and credit flags to calibrate the engine.</div>
+      </div>
+
+      <!-- INCOME + CASH -->
+      <div class="card">
+        <div class="card-title">💼 Financial Snapshot</div>
+        <div class="field-row">
+          <div class="field-group">
+            <div class="field-label">Monthly Gross Income</div>
+            <input type="number" id="income" placeholder="0" min="0" oninput="updateScreen1()">
+          </div>
+          <div class="field-group">
+            <div class="field-label">Available Cash / Month</div>
+            <input type="number" id="cash" placeholder="0" min="0" oninput="updateScreen1()">
+          </div>
+        </div>
+        <div class="field-group" style="margin-top:8px;">
+          <div class="field-label">Monthly Minimum Payments (total all cards)</div>
+          <input type="number" id="minimums" placeholder="0" min="0" oninput="updateScreen1()">
+        </div>
+        <div class="threshold-pills">
+          <div class="t-pill" id="dti-pill">DTI: —</div>
+          <div class="t-pill" id="eff-cash-pill">Effective Cash: —</div>
+        </div>
+      </div>
+
+      <!-- LOAN GOAL -->
+      <div class="card">
+        <div class="card-title">🎯 Loan Goal</div>
+        <div class="sec-sub" style="font-size:12px;margin-bottom:4px;">Select target product — engine output will show qualifying thresholds and score gap.</div>
+        <div class="goal-pill-row" id="goalPillRow"></div>
+      </div>
+
+      <!-- DISCOVERY FLAGS -->
+      <div class="card">
+        <div class="card-title">🚩 Credit Flags</div>
+        <div class="sec-sub" style="margin-bottom:12px;font-size:12px;">Toggle any that apply to this client. Each flag reduces confidence score.</div>
+        <div class="flags-grid" id="flagsGrid"></div>
+      </div>
+
+    </div>
+    <div class="screen-footer">
+      <button class="btn btn-gold" onclick="goTo(2)">Continue to Engine →</button>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════
+       SCREEN 2 — ENGINE
+  ══════════════════════════════════ -->
+  <div class="screen" id="screen2">
+    <div class="screen-body">
+      <div>
+        <div class="sec-label">Step 2</div>
+        <div class="sec-title">Account Engine</div>
+        <div class="sec-sub">Enter each revolving account. The engine ranks paydown priority by utilization impact.</div>
+      </div>
+
+      <div class="acct-list" id="acctList"></div>
+
+      <button class="add-acct-btn" onclick="addAccount()">＋ Add Account</button>
+
+    </div>
+    <div class="screen-footer">
+      <div class="btn-row">
+        <button class="btn btn-outline" onclick="goTo(1)">← Back</button>
+        <button class="btn btn-gold" onclick="runEngine()">Run Engine →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════
+       SCREEN 3 — NEXT BEST ACTION
+  ══════════════════════════════════ -->
+  <div class="screen" id="screen3">
+    <div class="screen-body" id="outputBody">
+      <div class="empty-state">
+        <div class="big">⚡</div>
+        Run the engine to see the Next Best Action.
+      </div>
+    </div>
+    <div class="screen-footer">
+      <div class="btn-row">
+        <button class="btn btn-outline" onclick="goTo(2)">← Back</button>
+        <button class="btn btn-outline" onclick="resetAll()">↺ Start Over</button>
+      </div>
+    </div>
+  </div>
+
+</div><!-- .shell -->
+
+<script>
+/* ═══════════════════════════════════════
+   DATA & STATE
+═══════════════════════════════════════ */
+const FLAGS = [
+  { id:'collections',   icon:'📁', label:'Active Collections',       sub:'Any open collection accounts',       impact: 20 },
+  { id:'recent_lates',  icon:'⏱', label:'Recent 30/60/90 Day Lates', sub:'Any lates in last 24 months',        impact: 15 },
+  { id:'thin_file',     icon:'📋', label:'Thin Credit File',          sub:'Fewer than 3 open tradelines',       impact: 12 },
+  { id:'no_income',     icon:'💼', label:'No Verifiable Income',      sub:'Self-employed / no W2 / stated',     impact: 12 },
+  { id:'charge_offs',   icon:'⚠️', label:'Charge-Offs',               sub:'Creditor wrote off the debt',        impact: 10 },
+  { id:'high_util',     icon:'📊', label:'High Overall Utilization',   sub:'Total utilization above 50%',        impact: 8  },
+  { id:'short_history', icon:'📅', label:'Short Credit History',       sub:'Oldest account under 2 years',       impact: 5  },
+];
+
+/* ── LOAN GOALS ── */
+const LOAN_GOALS = [
+  { id:'fha',   label:'FHA',          icon:'🏠', min:580,  good:620,  best:640,  model:'FHA Mortgage'    },
+  { id:'conv',  label:'Conventional', icon:'🏠', min:620,  good:660,  best:740,  model:'Conventional'    },
+  { id:'va',    label:'VA / USDA',    icon:'🏠', min:580,  good:620,  best:640,  model:'VA / USDA'       },
+  { id:'auto',  label:'Auto Loan',    icon:'🚗', min:580,  good:660,  best:720,  model:'Auto Score 8'    },
+];
+
+let flagged = new Set();
+let accounts = [];
+let acctIdCounter = 0;
+let selectedGoal = null; // LOAN_GOALS entry or null
+
+/* ═══════════════════════════════════════
+   INIT
+═══════════════════════════════════════ */
+(function init() {
+  // Render flags
+  const grid = document.getElementById('flagsGrid');
+  FLAGS.forEach(f => {
+    const el = document.createElement('div');
+    el.className = 'flag-item';
+    el.id = 'flag_' + f.id;
+    el.innerHTML = `
+      <div class="flag-left">
+        <span class="flag-icon">${f.icon}</span>
+        <div>
+          <div class="flag-text">${f.label}</div>
+          <div class="flag-sub">${f.sub} &nbsp;·&nbsp; <span style="color:var(--red)">−${f.impact} pts</span></div>
+        </div>
+      </div>
+      <div class="flag-toggle"></div>
+    `;
+    el.addEventListener('click', () => toggleFlag(f.id, el));
+    grid.appendChild(el);
+  });
+
+  // Render goal pills
+  const goalRow = document.getElementById('goalPillRow');
+  LOAN_GOALS.forEach(g => {
+    const el = document.createElement('div');
+    el.className = 'goal-pill';
+    el.id = 'goal_' + g.id;
+    el.textContent = g.icon + ' ' + g.label;
+    el.addEventListener('click', () => selectGoal(g.id));
+    goalRow.appendChild(el);
+  });
+
+  // Start with 2 blank accounts
+  addAccount();
+  addAccount();
+})();
+
+function selectGoal(id) {
+  if (selectedGoal?.id === id) {
+    // Deselect
+    selectedGoal = null;
+    document.querySelectorAll('.goal-pill').forEach(el => el.classList.remove('active'));
+  } else {
+    selectedGoal = LOAN_GOALS.find(g => g.id === id) || null;
+    document.querySelectorAll('.goal-pill').forEach(el => {
+      el.classList.toggle('active', el.id === 'goal_' + id);
+    });
+  }
+}
+
+/* ═══════════════════════════════════════
+   NAVIGATION
+═══════════════════════════════════════ */
+function goTo(screen) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('screen' + screen).classList.add('active');
+  updateStepUI(screen);
+  // Scroll to top
+  document.querySelector('.shell').scrollTop = 0;
+  window.scrollTo(0,0);
+}
+
+function updateStepUI(current) {
+  const progPcts = { 1: 5, 2: 45, 3: 100 };
+  document.getElementById('progBar').style.width = progPcts[current] + '%';
+
+  [1,2,3].forEach(i => {
+    const dot = document.getElementById('dot' + i);
+    const lbl = document.getElementById('lbl' + i);
+    dot.className = 'step-dot';
+    lbl.className = 'step-label';
+    if (i < current) { dot.classList.add('done'); lbl.classList.add('done'); dot.innerHTML = '✓'; }
+    else if (i === current) { dot.classList.add('active'); lbl.classList.add('active'); dot.innerHTML = i; }
+    else { dot.innerHTML = i; }
+  });
+
+  [1,2].forEach(i => {
+    const line = document.getElementById('line' + i);
+    line.className = 'step-line' + (i < current ? ' done' : '');
+  });
+}
+
+/* ═══════════════════════════════════════
+   SCREEN 1 — LIVE CALCS
+═══════════════════════════════════════ */
+function updateScreen1() {
+  const income = parseFloat(document.getElementById('income').value) || 0;
+  const cash = parseFloat(document.getElementById('cash').value) || 0;
+  const mins = parseFloat(document.getElementById('minimums').value) || 0;
+
+  const effCash = income > 0 ? Math.min(cash, income - mins) : cash;
+  const dti = income > 0 ? (mins / income * 100) : 0;
+
+  const dtiPill = document.getElementById('dti-pill');
+  const effPill = document.getElementById('eff-cash-pill');
+
+  dtiPill.textContent = income > 0 ? `DTI: ${dti.toFixed(1)}%` : 'DTI: —';
+  dtiPill.className = 't-pill' + (dti > 43 ? ' active' : '');
+
+  effPill.textContent = effCash > 0 ? `Effective Cash: $${effCash.toLocaleString('en-US',{maximumFractionDigits:0})}` : 'Effective Cash: —';
+  effPill.className = 't-pill' + (effCash > 0 ? ' active' : '');
+}
+
+/* ═══════════════════════════════════════
+   FLAG TOGGLES
+═══════════════════════════════════════ */
+function toggleFlag(id, el) {
+  if (flagged.has(id)) { flagged.delete(id); el.classList.remove('active'); }
+  else { flagged.add(id); el.classList.add('active'); }
+}
+
+/* ═══════════════════════════════════════
+   SCREEN 2 — ACCOUNTS
+═══════════════════════════════════════ */
+function addAccount() {
+  const id = ++acctIdCounter;
+  accounts.push({ id, name:'', balance:0, limit:0, payment:0 });
+  renderAccounts();
+}
+
+function removeAccount(id) {
+  accounts = accounts.filter(a => a.id !== id);
+  renderAccounts();
+}
+
+function renderAccounts() {
+  const list = document.getElementById('acctList');
+  list.innerHTML = '';
+
+  if (accounts.length === 0) {
+    list.innerHTML = '<div class="empty-state"><div class="big">💳</div>No accounts added yet.</div>';
+    return;
+  }
+
+  accounts.forEach((a, idx) => {
+    const util = a.limit > 0 ? (a.balance / a.limit * 100) : 0;
+    let utilClass = util >= 50 ? 'util-high' : util >= 30 ? 'util-mid' : 'util-low';
+    let barClass = util >= 50 ? 'util-high-bar' : util >= 30 ? 'util-mid-bar' : 'util-low-bar';
+
+    const div = document.createElement('div');
+    div.className = 'acct-card';
+    div.innerHTML = `
+      <div class="acct-card-hdr">
+        <div class="acct-card-name">${a.name || ('Account ' + (idx+1))}</div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          ${a.limit > 0 ? `<span class="acct-util-badge ${utilClass}">${util.toFixed(0)}%</span>` : ''}
+          <span onclick="removeAccount(${a.id})" style="cursor:pointer;color:var(--dim);font-size:16px;line-height:1;" title="Remove">✕</span>
+        </div>
+      </div>
+      <div class="acct-inputs">
+        <div class="acct-input-wrap">
+          <div class="acct-input-label">Account Name</div>
+          <input type="text" value="${a.name}" placeholder="e.g. Chase Sapphire"
+            oninput="updateAcct(${a.id},'name',this.value)">
+        </div>
+        <div class="acct-input-wrap">
+          <div class="acct-input-label">Min Payment</div>
+          <input type="number" value="${a.payment || ''}" placeholder="0" min="0"
+            oninput="updateAcct(${a.id},'payment',this.value)">
+        </div>
+        <div class="acct-input-wrap">
+          <div class="acct-input-label">Current Balance</div>
+          <input type="number" value="${a.balance || ''}" placeholder="0" min="0"
+            oninput="updateAcct(${a.id},'balance',this.value)">
+        </div>
+        <div class="acct-input-wrap">
+          <div class="acct-input-label">Credit Limit</div>
+          <input type="number" value="${a.limit || ''}" placeholder="0" min="0"
+            oninput="updateAcct(${a.id},'limit',this.value)">
+        </div>
+      </div>
+      ${a.limit > 0 ? `
+      <div class="util-bar-wrap">
+        <div class="util-bar ${barClass}" style="width:${Math.min(util,100)}%"></div>
+      </div>` : ''}
+    `;
+    list.appendChild(div);
+  });
+}
+
+function updateAcct(id, field, val) {
+  const a = accounts.find(x => x.id === id);
+  if (!a) return;
+  if (field === 'name') a.name = val;
+  else a[field] = parseFloat(val) || 0;
+  renderAccounts();
+}
+
+/* ═══════════════════════════════════════
+   TARGET UTILIZATION THRESHOLDS
+═══════════════════════════════════════ */
+function getTargetUtil(current) {
+  if (current > 50) return 49;
+  if (current > 30) return 29;
+  if (current > 9)  return 9;
+  return current; // already optimal
+}
+
+/* ═══════════════════════════════════════
+   ENGINE — PRIORITY SCORE
+═══════════════════════════════════════ */
+function calcPriority(a) {
+  const util = a.limit > 0 ? (a.balance / a.limit * 100) : 0;
+  const targetUtil = getTargetUtil(util);
+  const paydownNeeded = a.limit > 0
+    ? Math.max(0, a.balance - (a.limit * targetUtil / 100))
+    : 0;
+  const utilDelta = util - targetUtil;
+  const ptImpact = Math.round(utilDelta * 0.7); // ~0.7 pts per % util reduction
+  return { ...a, util, targetUtil, paydownNeeded, utilDelta, ptImpact };
+}
+
+/* ═══════════════════════════════════════
+   CONFIDENCE SCORE
+═══════════════════════════════════════ */
+function calcConfidence() {
+  let score = 100;
+  FLAGS.forEach(f => {
+    if (flagged.has(f.id)) score -= f.impact;
+  });
+  return Math.min(84, Math.max(0, score)); // hard cap at 84%
+}
+
+/* ═══════════════════════════════════════
+   RUN ENGINE
+═══════════════════════════════════════ */
+function runEngine() {
+  const income = parseFloat(document.getElementById('income').value) || 0;
+  const cashRaw = parseFloat(document.getElementById('cash').value) || 0;
+  const mins = parseFloat(document.getElementById('minimums').value) || 0;
+
+  // Income-constrained effective cash
+  const totalMins = accounts.reduce((s,a) => s + (a.payment||0), 0) || mins;
+  const effCash = income > 0 ? Math.min(cashRaw, income - totalMins) : cashRaw;
+
+  // Score and prioritize accounts
+  const valid = accounts.filter(a => a.limit > 0);
+  if (valid.length === 0) {
+    alert('Add at least one account with a credit limit to run the engine.');
+    return;
+  }
+
+  const scored = valid.map(calcPriority)
+    .filter(a => a.utilDelta > 0)
+    .sort((a, b) => {
+      // Priority = utilization% × paydown needed (high util + high dollar impact = top)
+      return (b.util * b.paydownNeeded) - (a.util * a.paydownNeeded);
+    });
+
+  const confidence = calcConfidence();
+
+  // Allocate cash greedily in priority order
+  let remaining = effCash;
+  const results = scored.map(a => {
+    const canFund = remaining >= a.paydownNeeded;
+    const partial = remaining > 0 && remaining < a.paydownNeeded;
+    const allocated = canFund ? a.paydownNeeded : (partial ? remaining : 0);
+    remaining = Math.max(0, remaining - allocated);
+    return { ...a, allocated, canFund, partial };
+  });
+
+  // Determine top move
+  const topMove = results.find(r => r.canFund || r.partial) || results[0];
+
+  renderOutput(topMove, results, effCash, income, totalMins, confidence);
+  saveEngineRun(topMove, results, effCash, confidence); // async, non-blocking
+  goTo(3);
+}
+
+/* ═══════════════════════════════════════
+   RENDER OUTPUT — SCREEN 3
+═══════════════════════════════════════ */
+// ── MIDDLE SCORE HELPER
+function getMiddleScore(eq, tu, ex) {
+  const vals = [eq, tu, ex].filter(v => v > 0).sort((a, b) => a - b);
+  if (vals.length === 0) return null;
+  if (vals.length === 1) return vals[0];
+  if (vals.length === 2) return Math.min(vals[0], vals[1]); // conservative: use lower
+  return vals[1]; // true median of 3
+}
+
+// ── DATE FORMATTER
+function formatChartDate(str) {
+  if (!str) return '—';
+  const d = new Date(str + (str.length === 10 ? 'T12:00:00' : ''));
+  if (isNaN(d)) return str.slice(5) || str;
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+// ── SCORE HISTORY CHART (SVG, pure inline)
+function renderScoreHistory() {
+  const history = window._reportHistory;
+  if (!history || history.length < 2) return '';
+
+  // Build series: one entry per report pull
+  const series = history.map(r => {
+    const borr = r.borrowers || [];
+    const b0 = borr[0] || null;
+    const b1 = borr[1] || null;
+    return {
+      label: formatChartDate(r.pullDate || (r.savedAt || '').slice(0, 10)),
+      eq:  b0 ? (b0.eq  || 0) : 0,
+      tu:  b0 ? (b0.tu  || 0) : 0,
+      ex:  b0 ? (b0.ex  || 0) : 0,
+      mid: b0 ? getMiddleScore(b0.eq || 0, b0.tu || 0, b0.ex || 0) : null,
+      co:  b1 ? getMiddleScore(b1.eq || 0, b1.tu || 0, b1.ex || 0) : null,
+    };
+  });
+
+  // Score range
+  const allVals = series.flatMap(s => [s.eq, s.tu, s.ex, s.co].filter(v => v && v > 0));
+  if (allVals.length === 0) return '';
+  const rawMin = Math.min(...allVals);
+  const rawMax = Math.max(...allVals);
+  const padded = Math.max(rawMax - rawMin, 40); // ensure some vertical spread
+  const minS = Math.max(400, rawMin - Math.round(padded * 0.2));
+  const maxS = Math.min(850, rawMax + Math.round(padded * 0.3));
+
+  const W = 460, H = 160;
+  const ml = 38, mr = 16, mt = 20, mb = 28;
+  const cw = W - ml - mr;
+  const ch = H - mt - mb;
+  const n  = series.length;
+
+  const xOf = i => ml + (n === 1 ? cw / 2 : (i / (n - 1)) * cw);
+  const yOf = s => mt + ch - ((Math.max(minS, Math.min(maxS, s)) - minS) / (maxS - minS)) * ch;
+
+  // Mortgage tier reference lines
+  const TIERS = [
+    { score: 580, color: '#e74c3c', label: '580' },
+    { score: 620, color: '#f39c12', label: '620' },
+    { score: 660, color: '#f1c40f', label: '660' },
+    { score: 740, color: '#2ecc71', label: '740' },
+  ].filter(t => t.score > minS && t.score < maxS);
+
+  let svg = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:${H}px;display:block;" xmlns="http://www.w3.org/2000/svg">`;
+
+  // Tier reference lines
+  TIERS.forEach(t => {
+    const y = yOf(t.score);
+    svg += `<line x1="${ml}" y1="${y.toFixed(1)}" x2="${W - mr}" y2="${y.toFixed(1)}" stroke="${t.color}44" stroke-width="1" stroke-dasharray="3,3"/>`;
+    svg += `<text x="${ml - 5}" y="${(y + 3.5).toFixed(1)}" font-size="9" fill="${t.color}99" text-anchor="end">${t.label}</text>`;
+  });
+
+  // Bureau lines (EQ / TU / EX) — light, supporting
+  const bureauDefs = [
+    { key: 'eq', stroke: '#C8A96E66', sw: 1.5 },
+    { key: 'tu', stroke: '#3498db66', sw: 1.5 },
+    { key: 'ex', stroke: '#e67e2266', sw: 1.5 },
+  ];
+  bureauDefs.forEach(({ key, stroke, sw }) => {
+    const pts = series.map((s, i) => s[key] > 0 ? `${xOf(i).toFixed(1)},${yOf(s[key]).toFixed(1)}` : null).filter(Boolean);
+    if (pts.length < 2) return;
+    svg += `<polyline points="${pts.join(' ')}" fill="none" stroke="${stroke}" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round"/>`;
+  });
+
+  // Primary middle score — bold gold
+  const midPts = series.map((s, i) => s.mid ? { x: xOf(i), y: yOf(s.mid), v: s.mid } : null).filter(Boolean);
+  if (midPts.length >= 2) {
+    svg += `<polyline points="${midPts.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')}" fill="none" stroke="#C8A96E" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>`;
+  }
+  midPts.forEach((p, i) => {
+    const labelY = p.y - 9;
+    svg += `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="4" fill="#C8A96E" stroke="#111" stroke-width="1.5"/>`;
+    svg += `<text x="${p.x.toFixed(1)}" y="${labelY.toFixed(1)}" font-size="10" fill="#C8A96E" text-anchor="middle" font-weight="700">${p.v}</text>`;
+  });
+
+  // Co-borrower middle — green dashed
+  const coPts = series.map((s, i) => s.co ? { x: xOf(i), y: yOf(s.co), v: s.co } : null).filter(Boolean);
+  if (coPts.length >= 2) {
+    svg += `<polyline points="${coPts.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')}" fill="none" stroke="#2ecc71" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="5,3"/>`;
+    coPts.forEach(p => {
+      svg += `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3.5" fill="#2ecc71" stroke="#111" stroke-width="1.5"/>`;
+      svg += `<text x="${p.x.toFixed(1)}" y="${(p.y + 18).toFixed(1)}" font-size="10" fill="#2ecc71" text-anchor="middle" font-weight="700">${p.v}</text>`;
+    });
+  }
+
+  // X-axis date labels
+  series.forEach((s, i) => {
+    svg += `<text x="${xOf(i).toFixed(1)}" y="${H - 4}" font-size="9" fill="#666" text-anchor="middle">${s.label}</text>`;
+  });
+
+  svg += '</svg>';
+
+  // Legend
+  const hasCo = coPts.length > 0;
+  let legend = `<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:10px;font-size:10px;color:var(--muted);">
+    <span><span style="color:#C8A96E;font-weight:700;">—</span> Middle Score</span>
+    <span><span style="color:#C8A96E88;">—</span> EQ &nbsp;<span style="color:#3498db88;">—</span> TU &nbsp;<span style="color:#e67e2288;">—</span> EX</span>
+    ${hasCo ? '<span><span style="color:#2ecc71;font-weight:700;">- -</span> Co-Borrower</span>' : ''}
+  </div>`;
+
+  return legend + svg;
+}
+
+// ── TIER REASON HELPER
+function getTierReason(currentUtil, targetUtil) {
+  const from = Math.round(currentUtil);
+  const to = targetUtil;
+  let tierLabel = '';
+  if (to === 49)      tierLabel = '>50%';
+  else if (to === 29) tierLabel = '>30%';
+  else if (to === 9)  tierLabel = '>9%';
+  return `Reduces utilization from ${from}% to ${to}% — crossing the ${tierLabel} scoring tier`;
+}
+
+// ── CONFIDENCE NOTE HELPER
+function getConfidenceNote(confidence, confFlags) {
+  if (confidence >= 84) return 'All key data present';
+  if (confFlags.length === 0) return 'Input data is complete';
+  // Surface the highest-impact active flag
+  const top = confFlags.sort((a, b) => b.impact - a.impact)[0];
+  const notes = {
+    collections:   'Active collections on file. Outcome less certain.',
+    recent_lates:  'Recent late payments on file. Recovery timeline less predictable.',
+    thin_file:     'Thin credit file. Score movement is more volatile.',
+    no_income:     'Income not verified. Cash constraint not fully applied.',
+    charge_offs:   'Charge-offs on file. Score ceiling may be lower.',
+    high_util:     'Multiple high-utilization accounts. Tier-drop complexity increases.',
+    short_history: 'Short credit history. Score response is less established.',
+  };
+  return notes[top.id] || `${top.label} flagged. Outcome less certain.`;
+}
+
+function renderOutput(top, all, effCash, income, totalMins, confidence) {
+  const body = document.getElementById('outputBody');
+  const dti = income > 0 ? (totalMins / income * 100) : 0;
+  const confFlags = FLAGS.filter(f => flagged.has(f.id));
+
+  let html = '';
+
+  // ── NEXT BEST ACTION HERO  (4-part locked structure)
+  if (top) {
+    const isPartial = top.partial && !top.canFund;
+    const heroAmt = isPartial ? Math.min(top.allocated, effCash) : top.paydownNeeded;
+    const heroPts = top.ptImpact;
+    const acctName = top.name || 'Account';
+    const reason = getTierReason(top.util, top.targetUtil);
+    const confNote = getConfidenceNote(confidence, [...confFlags]);
+
+    html += `
+    <div class="nba-hero">
+      <div class="nba-header">
+        <span class="nba-header-label">⚡ Next Best Action</span>
+        ${isPartial ? '<span class="nba-partial-badge">⚡ Partial Fund</span>' : ''}
+      </div>
+      <div class="nba-parts">
+
+        <div class="nba-part">
+          <div class="nba-part-tag">Action</div>
+          <div class="nba-action-text">Pay <span class="nba-action-amount">$${heroAmt.toLocaleString('en-US',{maximumFractionDigits:0})}</span> to ${acctName}</div>
+          ${isPartial ? '<div style="font-size:11px;color:var(--orange);margin-top:4px;">Apply available cash now — revisit next cycle for remainder</div>' : ''}
+        </div>
+
+        <div class="nba-part">
+          <div class="nba-part-tag">Reason</div>
+          <div class="nba-part-body">${reason}</div>
+        </div>
+
+        <div class="nba-part">
+          <div class="nba-part-tag">Expected Impact</div>
+          <div class="nba-part-body">
+            <span class="nba-pts-badge">Est. +${heroPts} pts</span>
+            <span class="nba-model-label">Mortgage Model</span>
+          </div>
+        </div>
+
+        <div class="nba-part">
+          <div class="nba-part-tag">Confidence</div>
+          <div class="nba-part-body">
+            <span class="nba-conf-score">${confidence}%</span>
+            <span class="nba-conf-reason"> — ${confNote}</span>
+          </div>
+        </div>
+
+      </div>
+    </div>`;
+  }
+
+  // ── GOAL CONTEXT BAR (only if a loan goal is selected)
+  if (selectedGoal) {
+    const g = selectedGoal;
+    const borr0 = window._borrowers?.[0];
+    const middle = borr0 ? getMiddleScore(borr0.eq || 0, borr0.tu || 0, borr0.ex || 0) : null;
+    const gapToMin  = middle !== null ? g.min  - middle : null;
+    const gapToGood = middle !== null ? g.good - middle : null;
+
+    let gapHtml = '';
+    if (middle !== null) {
+      const atMin  = middle >= g.min;
+      const atGood = middle >= g.good;
+      const atBest = middle >= g.best;
+      gapHtml = `
+      <div class="goal-gap-row">
+        <span class="goal-gap-label">Middle Score (current): <strong>${middle}</strong></span>
+        ${atBest  ? `<span class="goal-gap-val gap-met">✓ At best rate tier</span>` :
+          atGood  ? `<span class="goal-gap-val gap-met">✓ Good rate — ${g.best - middle} pts to best</span>` :
+          atMin   ? `<span class="goal-gap-val gap-met">✓ Qualifies — need +${g.good - middle} pts for good rate</span>` :
+                    `<span class="goal-gap-val gap-needed">Need +${g.min - middle} pts to qualify</span>`}
+      </div>`;
+    }
+
+    html += `
+    <div class="goal-bar">
+      <div class="goal-bar-top">
+        <span class="goal-bar-name">${g.icon} ${g.label}</span>
+        <span class="goal-bar-model">${g.model}</span>
+      </div>
+      <div class="goal-tier-row">
+        <div class="goal-tier min">Min: ${g.min}</div>
+        <div class="goal-tier good">Good Rate: ${g.good}</div>
+        <div class="goal-tier best">Best Rate: ${g.best}</div>
+      </div>
+      ${gapHtml}
+    </div>`;
+  }
+
+  // ── CONFIDENCE DETAIL (supporting info — summarized in hero Part 4 above)
+  html += `
+  <div class="conf-wrap">
+    <div class="conf-hdr">
+      <div>
+        <div class="card-title" style="margin-bottom:2px;">Confidence Detail</div>
+        <div style="font-size:11px;color:var(--muted);">Active flags and their impact on outcome reliability</div>
+      </div>
+      <div class="conf-pct">${confidence}%</div>
+    </div>
+    <div class="conf-bar-wrap">
+      <div class="conf-bar" style="width:${confidence}%"></div>
+    </div>
+    ${confFlags.length > 0 ? `
+    <div class="conf-flags-row">
+      ${confFlags.map(f => `<div class="conf-flag">${f.icon} ${f.label} −${f.impact}pts</div>`).join('')}
+    </div>` : '<div style="font-size:12px;color:var(--green);margin-top:6px;">✓ No flags active — confidence at ceiling (84%)</div>'}
+  </div>`;
+
+  // ── INCOME INSIGHT (only if income entered)
+  if (income > 0) {
+    const effCashLabel = Math.min(effCash, 0) < 0 ? 'Negative' : '$' + effCash.toLocaleString('en-US',{maximumFractionDigits:0});
+    html += `
+    <div class="income-insight">
+      <div class="card-title">Income & Cash Layer</div>
+      <div class="ii-row"><span class="ii-row-label">Monthly Gross Income</span><span class="ii-row-val gold">$${income.toLocaleString('en-US',{maximumFractionDigits:0})}</span></div>
+      <div class="ii-row"><span class="ii-row-label">Total Min Payments</span><span class="ii-row-val">$${totalMins.toLocaleString('en-US',{maximumFractionDigits:0})}</span></div>
+      <div class="ii-row"><span class="ii-row-label">Minimum Debt-to-Income</span><span class="ii-row-val ${dti > 43 ? 'red' : dti > 36 ? 'gold' : 'green'}">${dti.toFixed(1)}%</span></div>
+      <div class="ii-row"><span class="ii-row-label">Effective Cash Available</span><span class="ii-row-val ${effCash <= 0 ? 'red' : 'green'}">${effCashLabel}</span></div>
+    </div>`;
+  }
+
+  // ── PARTIAL NOTE
+  const partials = all.filter(r => r.partial && !r.canFund);
+  if (partials.length > 0 && effCash < all[0]?.paydownNeeded) {
+    html += `
+    <div class="partial-note">
+      ⚡ <strong>Partial Paydown Strategy:</strong> Cash covers ${all.filter(r=>r.canFund).length} account(s) fully. For the rest, apply what's available now — even partial drops below a utilization tier create real score movement.
+    </div>`;
+  }
+
+  // ── ACCOUNT STACK
+  html += `<div><div class="card-title" style="color:var(--gold);font-size:11px;letter-spacing:0.12em;text-transform:uppercase;margin-bottom:10px;">Priority Stack — All Accounts</div>`;
+  html += `<div style="display:flex;flex-direction:column;gap:8px;">`;
+
+  if (all.length === 0) {
+    html += `<div class="empty-state" style="padding:16px;">All accounts already at optimal utilization.</div>`;
+  }
+
+  all.forEach((a, i) => {
+    const utilClass = a.util >= 50 ? 'util-high' : a.util >= 30 ? 'util-mid' : 'util-low';
+    const barClass = a.util >= 50 ? 'util-high-bar' : a.util >= 30 ? 'util-mid-bar' : 'util-low-bar';
+    const funded = a.canFund ? '✓ Funded' : a.partial ? '⚡ Partial' : '— Unfunded';
+    const fundedColor = a.canFund ? 'var(--green)' : a.partial ? 'var(--orange)' : 'var(--dim)';
+
+    html += `
+    <div class="output-acct ${i===0?'top-pick':''}">
+      <div class="output-acct-left">
+        ${i===0 ? '<div style="font-size:10px;color:var(--gold);letter-spacing:0.1em;margin-bottom:3px;">★ TOP PICK</div>' : ''}
+        <div class="output-acct-name">${a.name || 'Account'}</div>
+        <div class="output-acct-detail">${a.util.toFixed(0)}% → ${a.targetUtil}% &nbsp;·&nbsp; Pay $${a.paydownNeeded.toLocaleString('en-US',{maximumFractionDigits:0})}</div>
+        <div class="util-bar-mini" style="margin-top:5px;">
+          <div class="util-bar-mini-fill ${barClass}" style="width:${Math.min(a.util,100)}%"></div>
+        </div>
+      </div>
+      <div class="output-acct-util">
+        <span class="output-acct-badge ${utilClass}">${a.util.toFixed(0)}%</span>
+        <span class="output-acct-pts">+${a.ptImpact} pts</span>
+        <span style="font-size:10px;color:${fundedColor};font-weight:700;">${funded}</span>
+      </div>
+    </div>`;
+  });
+
+  // Include accounts already at optimal util
+  const optimal = accounts.filter(a => a.limit > 0).filter(a => {
+    const u = a.balance / a.limit * 100;
+    return u <= 9;
+  });
+  if (optimal.length > 0) {
+    optimal.forEach(a => {
+      const u = (a.balance / a.limit * 100).toFixed(0);
+      html += `
+      <div class="output-acct">
+        <div class="output-acct-left">
+          <div class="output-acct-name" style="color:var(--muted)">${a.name || 'Account'}</div>
+          <div class="output-acct-detail">${u}% utilization — already optimal</div>
+        </div>
+        <div class="output-acct-util">
+          <span class="output-acct-badge util-low">${u}%</span>
+          <span class="output-acct-pts" style="color:var(--green)">✓ OK</span>
+        </div>
+      </div>`;
+    });
+  }
+
+  html += '</div></div>';
+
+  // ── SCORE HISTORY CHART (only when 2+ report pulls exist)
+  const chartHtml = renderScoreHistory();
+  if (chartHtml) {
+    html += `
+    <div style="margin-top:4px;">
+      <div class="card-title" style="color:var(--gold);font-size:11px;letter-spacing:0.12em;text-transform:uppercase;margin-bottom:10px;">Score History</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:8px;">Middle score trajectory across all report pulls · Mortgage tier bands shown</div>
+      ${chartHtml}
+    </div>`;
+  }
+
+  body.innerHTML = html;
+}
+
+/* ═══════════════════════════════════════
+   RESET
+═══════════════════════════════════════ */
+/* ── SUPABASE SESSION GUARD + CLIENT LOAD ── */
+window._sb = null;
+window._clientId = null;
+window._pullDate = null;
+window._borrowers = null;
+window._reportHistory = null;
+
+(async function guardAndLoad() {
+  const { createClient } = supabase;
+  const sb = createClient(LEVRAGE_CONFIG.supabaseUrl, LEVRAGE_CONFIG.supabaseKey);
+  window._sb = sb;
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { window.location.href = 'LeVrage_login.html'; return; }
+
+  // Load client — URL param takes priority over localStorage
+  const params = new URLSearchParams(window.location.search);
+  const clientId = params.get('clientId');
+  window._clientId = clientId;
+  let clientData = null;
+
+  if (clientId) {
+    const { data } = await sb.from('clients').select('*').eq('id', clientId).single();
+    if (data) {
+      const history = data.report_history || [];
+      const report = history.length > 0 ? history[history.length - 1] : null;
+      window._reportHistory = history;
+      window._pullDate = report?.pullDate || null;
+      window._borrowers = report?.borrowers || null;
+      clientData = {
+        clientId: data.id, clientName: data.name, clientPhone: data.phone || '',
+        pullDate: report?.pullDate || '', accounts: report?.accounts || [],
+        borrowers: report?.borrowers || [], negativeCount: report?.negativeCount || 0,
+      };
+      localStorage.setItem('levrage_import', JSON.stringify(clientData));
+    }
+  } else {
+    try { clientData = JSON.parse(localStorage.getItem('levrage_import') || 'null'); } catch(e) {}
+  }
+
+  if (!clientData || !clientData.clientName || clientData.clientName === 'Unknown Client') return;
+
+  document.getElementById('cbName').textContent = clientData.clientName;
+  document.getElementById('cbMeta').textContent =
+    `${clientData.accounts?.length || 0} accounts · Pulled ${clientData.pullDate || '—'}`;
+  document.getElementById('clientBanner').style.display = 'flex';
+
+  if (accounts.length <= 2 && clientData.accounts?.length > 0) {
+    accounts = []; acctIdCounter = 0;
+    clientData.accounts.forEach(a => {
+      accounts.push({ id: ++acctIdCounter, name: a.name, balance: a.balance, limit: a.limit, payment: a.payment || 0 });
+    });
+    renderAccounts();
+  }
+})();
+
+/* ═══════════════════════════════════════
+   ENGINE → SUPABASE SAVE
+═══════════════════════════════════════ */
+async function saveEngineRun(top, all, effCash, confidence) {
+  if (!window._sb || !window._clientId) return; // no client context — skip silently
+
+  const activeFlags = FLAGS
+    .filter(f => flagged.has(f.id))
+    .map(f => ({ id: f.id, label: f.label, impact: f.impact }));
+
+  const topEntry = top ? {
+    accountName:  top.name || '',
+    paydownAmount: top.paydownNeeded,
+    allocatedAmount: top.allocated || 0,
+    isPartial:    top.partial && !top.canFund,
+    utilBefore:   Math.round(top.util),
+    utilAfter:    top.targetUtil,
+    tierCrossed:  getTierReason(top.util, top.targetUtil),
+    estimatedPts: top.ptImpact,
+  } : null;
+
+  const accountStack = (all || []).map(a => ({
+    name:         a.name,
+    balance:      a.balance,
+    limit:        a.limit,
+    util:         Math.round(a.util),
+    paydownNeeded: a.paydownNeeded,
+    ptImpact:     a.ptImpact,
+    canFund:      a.canFund,
+    partial:      a.partial,
+  }));
+
+  const newEntry = {
+    runAt:        new Date().toISOString(),
+    pullDate:     window._pullDate || null,
+    effectiveCash: effCash,
+    confidence,
+    goal: selectedGoal ? { id: selectedGoal.id, label: selectedGoal.label, min: selectedGoal.min, good: selectedGoal.good, best: selectedGoal.best } : null,
+    activeFlags,
+    topRecommendation: topEntry,
+    accountStack,
+  };
+
+  try {
+    // Read current engine_history, append, write back
+    const { data: row } = await window._sb
+      .from('clients')
+      .select('engine_history')
+      .eq('id', window._clientId)
+      .single();
+
+    const existing = row?.engine_history || [];
+    await window._sb
+      .from('clients')
+      .update({ engine_history: [...existing, newEntry] })
+      .eq('id', window._clientId);
+  } catch(e) {
+    // Non-blocking — swallow errors so the UI is never interrupted
+    console.warn('[LeVrage] saveEngineRun failed:', e);
+  }
+}
+
+function resetAll() {
+  flagged.clear();
+  accounts = [];
+  acctIdCounter = 0;
+  selectedGoal = null;
+  document.querySelectorAll('.goal-pill').forEach(el => el.classList.remove('active'));
+  document.getElementById('income').value = '';
+  document.getElementById('cash').value = '';
+  document.getElementById('minimums').value = '';
+  document.querySelectorAll('.flag-item').forEach(el => el.classList.remove('active'));
+  updateScreen1();
+  addAccount();
+  addAccount();
+  document.getElementById('outputBody').innerHTML = `
+    <div class="empty-state">
+      <div class="big">⚡</div>
+      Run the engine to see the Next Best Action.
+    </div>`;
+  goTo(1);
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LeVrage — Login</title>
+<script src="levrage_config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #0f0f0f; --surface: #1a1a1a; --card: #222; --border: #333;
+  --gold: #C8A96E; --gold2: #a8843e; --gold-glow: rgba(200,169,110,0.12);
+  --text: #f0f0f0; --muted: #888; --dim: #444;
+  --green: #2ecc71; --red: #e74c3c;
+}
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 40px 36px;
+  width: 100%;
+  max-width: 420px;
+}
+.logo { font-size: 32px; font-weight: 800; color: var(--gold); letter-spacing: 0.04em; margin-bottom: 4px; }
+.logo span { color: var(--text); font-weight: 300; }
+.tagline { font-size: 11px; color: var(--muted); letter-spacing: 0.14em; text-transform: uppercase; margin-bottom: 32px; }
+.tabs { display: flex; gap: 0; margin-bottom: 28px; border-bottom: 1px solid var(--border); }
+.tab {
+  flex: 1; padding: 10px; text-align: center; font-size: 13px; font-weight: 600;
+  color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent;
+  transition: color 0.2s, border-color 0.2s; margin-bottom: -1px;
+}
+.tab.active { color: var(--gold); border-bottom-color: var(--gold); }
+.field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px; }
+.field label { font-size: 11px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
+.field input {
+  background: #111; border: 1px solid var(--border); border-radius: 8px;
+  color: var(--text); font-size: 15px; padding: 11px 14px; outline: none;
+  transition: border-color 0.2s; font-family: inherit;
+}
+.field input:focus { border-color: var(--gold); }
+.btn {
+  width: 100%; padding: 13px; border: none; border-radius: 10px;
+  font-size: 15px; font-weight: 700; cursor: pointer;
+  transition: opacity 0.2s, transform 0.1s; margin-top: 6px;
+}
+.btn:active { transform: scale(0.98); }
+.btn-gold { background: linear-gradient(135deg, var(--gold2), var(--gold)); color: #111; }
+.btn-gold:hover { opacity: 0.9; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.msg {
+  margin-top: 14px; padding: 10px 14px; border-radius: 8px;
+  font-size: 13px; display: none; line-height: 1.5;
+}
+.msg.error { background: rgba(231,76,60,0.1); border: 1px solid rgba(231,76,60,0.3); color: #e88; display: block; }
+.msg.success { background: rgba(46,204,113,0.1); border: 1px solid rgba(46,204,113,0.3); color: var(--green); display: block; }
+.divider { text-align: center; margin: 18px 0; color: var(--dim); font-size: 12px; position: relative; }
+.divider::before, .divider::after { content: ''; position: absolute; top: 50%; width: 40%; height: 1px; background: var(--border); }
+.divider::before { left: 0; } .divider::after { right: 0; }
+.forgot { text-align: right; margin-top: -8px; margin-bottom: 14px; }
+.forgot a { font-size: 12px; color: var(--muted); cursor: pointer; text-decoration: none; }
+.forgot a:hover { color: var(--gold); }
+.signup-note { font-size: 12px; color: var(--muted); text-align: center; margin-top: 16px; line-height: 1.6; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">LeV<span>rage</span></div>
+  <div class="tagline">Move the Pivot — Loan Officer Portal</div>
+
+  <div class="tabs">
+    <div class="tab active" id="tab-signin" onclick="switchTab('signin')">Sign In</div>
+    <div class="tab" id="tab-signup" onclick="switchTab('signup')">Create Account</div>
+  </div>
+
+  <!-- SIGN IN -->
+  <div id="panel-signin">
+    <div class="field">
+      <label>Email</label>
+      <input type="email" id="si-email" placeholder="you@company.com" autocomplete="email">
+    </div>
+    <div class="field">
+      <label>Password</label>
+      <input type="password" id="si-password" placeholder="••••••••" autocomplete="current-password"
+        onkeydown="if(event.key==='Enter') signIn()">
+    </div>
+    <div class="forgot"><a onclick="showForgot()">Forgot password?</a></div>
+    <button class="btn btn-gold" id="si-btn" onclick="signIn()">Sign In →</button>
+    <div class="msg" id="si-msg"></div>
+  </div>
+
+  <!-- SIGN UP -->
+  <div id="panel-signup" style="display:none;">
+    <div class="field">
+      <label>Full Name</label>
+      <input type="text" id="su-name" placeholder="Nick Gegovic" autocomplete="name">
+    </div>
+    <div class="field">
+      <label>Email</label>
+      <input type="email" id="su-email" placeholder="you@company.com" autocomplete="email">
+    </div>
+    <div class="field">
+      <label>Password</label>
+      <input type="password" id="su-password" placeholder="8+ characters" autocomplete="new-password">
+    </div>
+    <div class="field">
+      <label>Company / Brokerage</label>
+      <input type="text" id="su-company" placeholder="West Capital Lending">
+    </div>
+    <button class="btn btn-gold" id="su-btn" onclick="signUp()">Create Account →</button>
+    <div class="msg" id="su-msg"></div>
+    <div class="signup-note">Your client data is private to your account.<br>No other LO can see your clients.</div>
+  </div>
+
+  <!-- FORGOT PASSWORD -->
+  <div id="panel-forgot" style="display:none;">
+    <div style="margin-bottom:16px;font-size:13px;color:var(--muted);line-height:1.6;">Enter your email and we'll send a reset link.</div>
+    <div class="field">
+      <label>Email</label>
+      <input type="email" id="fp-email" placeholder="you@company.com">
+    </div>
+    <button class="btn btn-gold" onclick="sendReset()">Send Reset Link</button>
+    <div class="msg" id="fp-msg"></div>
+    <div style="text-align:center;margin-top:16px;">
+      <a onclick="switchTab('signin')" style="font-size:12px;color:var(--muted);cursor:pointer;">← Back to Sign In</a>
+    </div>
+  </div>
+</div>
+
+<script>
+const { createClient } = supabase;
+const sb = createClient(LEVRAGE_CONFIG.supabaseUrl, LEVRAGE_CONFIG.supabaseKey);
+
+// If already logged in, go straight to clients
+sb.auth.getSession().then(({ data: { session } }) => {
+  if (session) window.location.href = 'LeVrage_Clients.html';
+});
+
+function switchTab(tab) {
+  document.getElementById('panel-signin').style.display   = tab === 'signin'  ? '' : 'none';
+  document.getElementById('panel-signup').style.display   = tab === 'signup'  ? '' : 'none';
+  document.getElementById('panel-forgot').style.display   = tab === 'forgot'  ? '' : 'none';
+  document.getElementById('tab-signin').className = 'tab' + (tab === 'signin' ? ' active' : '');
+  document.getElementById('tab-signup').className = 'tab' + (tab === 'signup' ? ' active' : '');
+}
+
+function showForgot() {
+  document.getElementById('panel-signin').style.display = 'none';
+  document.getElementById('panel-forgot').style.display = '';
+}
+
+function setMsg(id, text, type) {
+  const el = document.getElementById(id);
+  el.textContent = text;
+  el.className = 'msg ' + type;
+}
+
+function setBtnLoading(id, loading, label = 'Sign In →') {
+  const btn = document.getElementById(id);
+  btn.disabled = loading;
+  btn.textContent = loading ? 'Please wait...' : label;
+}
+
+async function signIn() {
+  const email = document.getElementById('si-email').value.trim();
+  const pass  = document.getElementById('si-password').value;
+  if (!email || !pass) { setMsg('si-msg', 'Email and password are required.', 'error'); return; }
+
+  setBtnLoading('si-btn', true, 'Sign In →');
+  const { error } = await sb.auth.signInWithPassword({ email, password: pass });
+  setBtnLoading('si-btn', false, 'Sign In →');
+
+  if (error) { setMsg('si-msg', error.message, 'error'); return; }
+  window.location.href = 'LeVrage_Clients.html';
+}
+
+async function signUp() {
+  const name    = document.getElementById('su-name').value.trim();
+  const email   = document.getElementById('su-email').value.trim();
+  const pass    = document.getElementById('su-password').value;
+  const company = document.getElementById('su-company').value.trim();
+
+  if (!name || !email || !pass) { setMsg('su-msg', 'Name, email, and password are required.', 'error'); return; }
+  if (pass.length < 8) { setMsg('su-msg', 'Password must be at least 8 characters.', 'error'); return; }
+
+  setBtnLoading('su-btn', true, 'Create Account →');
+  const { data, error } = await sb.auth.signUp({
+    email, password: pass,
+    options: { data: { full_name: name, company } }
+  });
+  setBtnLoading('su-btn', false, 'Create Account →');
+
+  if (error) { setMsg('su-msg', error.message, 'error'); return; }
+
+  // Update profile with company
+  if (data.user) {
+    await sb.from('lo_profiles').upsert({ id: data.user.id, full_name: name, company });
+  }
+
+  if (data.session) {
+    window.location.href = 'LeVrage_Clients.html';
+  } else {
+    setMsg('su-msg', '✓ Check your email to confirm your account, then sign in.', 'success');
+  }
+}
+
+async function sendReset() {
+  const email = document.getElementById('fp-email').value.trim();
+  if (!email) { setMsg('fp-msg', 'Enter your email address.', 'error'); return; }
+  const { error } = await sb.auth.resetPasswordForEmail(email, {
+    redirectTo: window.location.origin + '/LeVrage_login.html'
+  });
+  if (error) { setMsg('fp-msg', error.message, 'error'); return; }
+  setMsg('fp-msg', '✓ Reset link sent. Check your inbox.', 'success');
+}
+</script>
+</body>
+</html>

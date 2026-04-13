@@ -1,0 +1,18 @@
+{
+  "version": 2,
+  "name": "levrage",
+  "builds": [
+    { "src": "*.html", "use": "@vercel/static" },
+    { "src": "*.js",   "use": "@vercel/static" }
+  ],
+  "routes": [
+    { "src": "/",                    "dest": "/LeVrage_login.html"      },
+    { "src": "/app",                 "dest": "/LeVrage_app.html"        },
+    { "src": "/simulator",           "dest": "/LeVrage_Simulator.html"  },
+    { "src": "/parser",              "dest": "/LeVrage_PDFParser.html"  },
+    { "src": "/clients",             "dest": "/LeVrage_Clients.html"    },
+    { "src": "/dispute",             "dest": "/LeVrage_DisputeLetters.html" },
+    { "src": "/cashbridge",          "dest": "/LeVrage_CashBridge.html" },
+    { "src": "/(.*)",                "dest": "/$1"                      }
+  ]
+}
