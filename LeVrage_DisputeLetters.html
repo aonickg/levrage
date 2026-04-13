@@ -1,6 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="icon" type="image/png" href="/apple-touch-icon.png">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#C8A96E">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="LeVrage">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>LeVrage — Dispute Letter Generator</title>
@@ -602,7 +609,14 @@ function generateLetters() {
 function printLetter(i) {
   const content = document.getElementById('letter-'+i).innerHTML;
   const win = window.open('','_blank','width=800,height=900');
-  win.document.write(`<!DOCTYPE html><html><head><style>
+  win.document.write(`<!DOCTYPE html><html><head>
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="icon" type="image/png" href="/apple-touch-icon.png">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#C8A96E">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="LeVrage"><style>
     body{font-family:'Times New Roman',serif;font-size:13px;line-height:1.7;padding:48px 56px;color:#1a1a1a;max-width:680px;margin:0 auto;}
     p{margin-bottom:14px;} ul{margin:10px 0 10px 24px;} li{margin-bottom:6px;}
     .letter-sig{margin-top:32px;} .letter-cert{margin-top:16px;font-size:11px;color:#555;font-style:italic;}
